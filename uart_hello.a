@@ -1,0 +1,156 @@
+; --- LCD Hello ---
+
+        !to "uart_hello.bin", plain
+        * = $8000
+
+; --- ACIA Registers ---
+!addr ACIA_DATA     = $4400
+!addr ACIA_STATUS   = $4401
+!addr ACIA_COMMAND  = $4402
+!addr ACIA_CONTROL  = $4403
+
+; --- VIA Registers ---
+!addr PORTB = $6000
+!addr PORTA = $6001
+!addr DDRB  = $6002
+!addr DDRA  = $6003
+!addr T1CL  = $6004
+!addr T1CH  = $6005
+!addr ACR   = $600B
+!addr IFR   = $600D
+!addr IER   = $600E
+
+; --- LCD Control Bits ---
+E  = %10000000
+RW = %01000000
+RS = %00100000
+
+; --- Zero Page ---
+!addr ticks = $00
+!addr wait  = $04
+
+
+reset:      ldx $FF
+            txs
+
+            jsr uart_init
+            jsr timer_init
+
+            lda #%11111111  ; Set all pins on port B to output
+            sta DDRB
+            lda #%11100000  ; Set top 3 pins on port A to output
+            sta DDRA
+
+            lda #%00111000  ; Set 8bit mode; 2-line display; 5x8 font
+            jsr lcd_inst
+
+            lda  #%00001110 ; Disply on, Cursor on; blink off
+            jsr lcd_inst
+
+            lda #%00000110  ; Increent and shift cursor; don't shift display
+            jsr lcd_inst
+
+            lda #%00000001  ; Cleardisplay
+            jsr lcd_inst
+
+            ldx #0
+
+print:      lda message,x
+            beq loop
+            jsr print_ch  ; send the character to the LCD
+            jsr put_chr   ; send the character to the UART
+            inx
+            jmp print
+
+loop:       jmp loop
+
+wait_tick:  pha
+            lda ticks
+            sta wait
+-           lda ticks
+            cmp wait
+            beq -
+            pla
+            rts
+
+message:    !raw "Hello, world!\0"
+
+lcd_wait:   pha
+            lda #%00000000  ; port B is input
+            sta DDRB
+lcd_busy:   lda #RW
+            sta PORTA
+            lda #(RW | E)
+            sta PORTA
+            lda PORTB
+            and #%10000000
+            bne lcd_busy
+
+            lda #RW
+            sta PORTA
+            lda #%11111111  ; port B is output
+            sta DDRB
+            pla
+            rts
+
+lcd_inst:   jsr lcd_wait
+            sta PORTB
+            lda #0          ; Clear Rs/RW/E bits
+            sta PORTA
+            lda #E          ; Set E bit to send instruction
+            sta PORTA
+            lda #0          ; Clear Rs/RW/E bits
+            sta PORTA
+            rts
+
+print_ch:   pha
+            jsr lcd_wait
+            sta PORTB
+            lda #RS         ; Set RS; Clear RW/E bits
+            sta PORTA
+            lda #(RS | E)   ; Set E bit to send instruction
+            sta PORTA
+            lda #RS         ; Clear E bit
+            sta PORTA
+            pla
+            rts
+
+uart_init:  lda #%00011110  ; 1 stop bit; WL=8; baud; 9600
+            sta ACIA_CONTROL
+            lda #%00001011  ; no parity; echo off; interrupt off; DTR active low
+            sta ACIA_COMMAND
+            rts
+
+put_chr:    sta ACIA_DATA
+            ; jsr wait_tick
+            rts
+
+timer_init: lda #0
+            sta ticks
+            sta ticks + 1
+            sta ticks + 2
+            sta ticks + 3
+            lda #%01000000  ; T1 continuous interrupt ; PB7 disabled
+            sta ACR
+            lda #$0E        ; Set the counter to (n + 2) = 10,000 µs
+            sta T1CL        ; 9,998 = $270E
+            lda #$27
+            sta T1CH
+            lda #%11000000  ; enable Timer 1 interrupts
+            sta IER
+            cli
+            rts
+
+irq:        bit T1CL        ; reading clears the interrupt
+            inc ticks
+            bne +
+            inc ticks + 1
+            bne +
+            inc ticks + 2
+            bne +
+            inc ticks + 3
++           rti
+
+          * = $FFFC
+          !word reset
+          !word irq
