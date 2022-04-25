@@ -50,19 +50,21 @@ reset:      ldx $FF
             lda #%00000110  ; Increent and shift cursor; don't shift display
             jsr lcd_inst
 
-            lda #%00000001  ; Cleardisplay
-            jsr lcd_inst
+            jsr lcd_clear
 
             ldx #0
 
 print:      lda message,x
             beq loop
-            jsr print_ch  ; send the character to the LCD
+            ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
             inx
             jmp print
 
-loop:       jmp loop
+loop:       jsr poll_chr  ; read character from uart
+            bcc +         ; if a character was read,
+            jsr print_ch  ; print the character to LCD
++           jmp loop
 
 wait_tick:  pha
             lda ticks
@@ -115,6 +117,10 @@ print_ch:   pha
             pla
             rts
 
+lcd_clear:  lda #%00000001  ; Cleardisplay
+            jsr lcd_inst
+            rts
+
 uart_init:  lda #%00011110  ; 1 stop bit; WL=8; baud; 9600
             sta ACIA_CONTROL
             lda #%00001011  ; no parity; echo off; interrupt off; DTR active low
@@ -122,8 +128,16 @@ uart_init:  lda #%00011110  ; 1 stop bit; WL=8; baud; 9600
             rts
 
 put_chr:    sta ACIA_DATA
-            ; jsr wait_tick
+            jsr wait_tick
             rts
+
+poll_chr:   clc             ; carry flag will be clear if not char ready
+            lda ACIA_STATUS
+            and #%00001000  ; is receiver data register full?
+            beq +           ; if not, rts (don't wait)
+            lda ACIA_DATA
+            sec             ; set the carry flag if we got a character
++           rts
 
 timer_init: lda #0
             sta ticks
