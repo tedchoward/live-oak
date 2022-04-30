@@ -1,6 +1,7 @@
 ; --- LCD Hello ---
 
         !to "uart_hello.bin", plain
+        !cpu w65c02
         * = $8000
 
 ; --- ACIA Registers ---
@@ -26,8 +27,18 @@ RW = %01000000
 RS = %00100000
 
 ; --- Zero Page ---
-!addr ticks = $00
-!addr wait  = $04
+!addr ticks  = $00  ; 4 bytes ($00 - $03)
+!addr wait   = $04
+!addr a_reg  = $05
+!addr x_reg  = $05
+!addr y_reg  = $06
+!addr s_reg  = $07
+!addr sp_reg = $08
+!addr pc_reg = $09  ; 2 bytes ($09 - $0A)
+!addr buffer = $0B  ; 22 bytes ($0B - $22)
+!addr hi_hex = $23
+!addr lo_hex = $24
+
 
 
 reset:      ldx $FF
@@ -35,26 +46,20 @@ reset:      ldx $FF
 
             jsr uart_init
             jsr timer_init
+            jsr lcd_init
 
-            lda #%11111111  ; Set all pins on port B to output
-            sta DDRB
-            lda #%11100000  ; Set top 3 pins on port A to output
-            sta DDRA
-
-            lda #%00111000  ; Set 8bit mode; 2-line display; 5x8 font
-            jsr lcd_inst
-
-            lda  #%00001110 ; Disply on, Cursor on; blink off
-            jsr lcd_inst
-
-            lda #%00000110  ; Increent and shift cursor; don't shift display
-            jsr lcd_inst
-
-            jsr lcd_clear
-
+            jsr store_registers
             ldx #0
 
-print:      lda message,x
+print:      lda print_reg_msg,x
+            beq +
+            ; jsr print_ch  ; send the character to the LCD
+            jsr put_chr   ; send the character to the UART
+            inx
+            jmp print
+
++           ldx #0
+            lda buffer,x
             beq loop
             ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
@@ -75,7 +80,145 @@ wait_tick:  pha
             pla
             rts
 
+; sprintf(buffer, "; %4x %2x %2x %2 %2x %2x\n", pc, sr, ac, xr, yr, sp);
+store_registers:
+            php
+            pha
+            phx
+            lda #$3B            ; ';' character
+            sta buffer
+            lda #$20            ; ' ' character
+            sta buffer + 1
+            tsx
+            inx                 ; now pointing at X
+            inx                 ; now pointing at A
+            inx                 ; now pointing at SR
+            inx                 ; now pointing at PC (low)
+            inx                 ; now pointing at PC (high)
+            lda $100,x          ; high byte of PC
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 2
+            lda lo_hex
+            sta buffer + 3
+            dex                 ; now pointing at PC (low)
+            lda $100,x          ; low byte of PC
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 4
+            lda lo_hex
+            sta buffer + 5
+            lda #$20            ; ' ' character
+            sta buffer + 6
+            dex                 ; now pointing at SR
+            lda $100,x
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 7
+            lda lo_hex
+            sta buffer + 8
+            lda #$20            ; ' ' character
+            sta buffer + 9
+            dex                 ; now pointing at A
+            lda $100,x
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 10
+            lda lo_hex
+            sta buffer + 11
+            lda #$20            ; ' ' character
+            sta buffer + 12
+            dex                 ; now pointing at X
+            lda $100,x
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 13
+            lda lo_hex
+            sta buffer + 14
+            lda #$20            ; ' ' character
+            sta buffer + 15
+            sty hi_hex          ; Y register
+            sty lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 16
+            lda lo_hex
+            sta buffer + 17
+            lda #$20            ; ' ' character
+            sta buffer + 18
+            dex                 ; Same as SP
+            lda $100,x
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            sta buffer + 19
+            lda lo_hex
+            sta buffer + 20
+            lda #$0D            ; '\r'
+            sta buffer + 21
+            lda #$0A            ; '\n'
+            sta buffer + 22
+            stz buffer + 23     ; null terminated string
+            plx
+            pla
+            plp
+            rts
+
+convert_to_hex:
+            phy
+            pha
+            lsr hi_hex
+            lsr hi_hex
+            lsr hi_hex
+            lsr hi_hex
+            ldy hi_hex
+            lda hex_lookup,y
+            sta hi_hex
+            lda lo_hex
+            and #$0F
+            tay
+            lda hex_lookup,y
+            sta lo_hex
+            ply
+            pla
+            rts
+
+
+
 message:    !raw "Hello, world!\0"
+
+hex_lookup: !raw "0123456789ABCDEF"
+
+print_reg_msg:
+            !raw "   pc  sr ac xr yr sp   v1.0.0\r\n\0"
+
+
+lcd_init:   lda #%11111111  ; Set all pins on port B to output
+            sta DDRB
+            lda #%11100000  ; Set top 3 pins on port A to output
+            sta DDRA
+
+            lda #%00111000  ; Set 8bit mode; 2-line display; 5x8 font
+            jsr lcd_inst
+
+            lda  #%00001110 ; Disply on, Cursor on; blink off
+            jsr lcd_inst
+
+            lda #%00000110  ; Increent and shift cursor; don't shift display
+            jsr lcd_inst
+
+            jsr lcd_clear
 
 lcd_wait:   pha
             lda #%00000000  ; port B is input
