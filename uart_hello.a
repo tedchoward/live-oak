@@ -48,23 +48,27 @@ reset:      ldx $FF
             jsr timer_init
             jsr lcd_init
 
+            lda #$10
+            ldx #$5A
+            ldy #$B7
+
             jsr store_registers
             ldx #0
 
-print:      lda print_reg_msg,x
-            beq +
+print_msg:  lda print_reg_msg,x
+            beq print_reg
             ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
             inx
-            jmp print
+            jmp print_msg
 
-+           ldx #0
-            lda buffer,x
+print_reg:  ldx #0
+print_reg1: lda buffer,x
             beq loop
             ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
             inx
-            jmp print
+            jmp print_reg1
 
 loop:       jsr poll_chr  ; read character from uart
             bcc +         ; if a character was read,
@@ -85,11 +89,13 @@ store_registers:
             php
             pha
             phx
+            phy
             lda #$3B            ; ';' character
             sta buffer
             lda #$20            ; ' ' character
             sta buffer + 1
             tsx
+            inx                 ; now pointing at Y
             inx                 ; now pointing at X
             inx                 ; now pointing at A
             inx                 ; now pointing at SR
@@ -147,8 +153,10 @@ store_registers:
             sta buffer + 14
             lda #$20            ; ' ' character
             sta buffer + 15
-            sty hi_hex          ; Y register
-            sty lo_hex
+            dex                 ; now pointing at Y
+            lda $100,x
+            sta hi_hex
+            sta lo_hex
             jsr convert_to_hex
             lda hi_hex
             sta buffer + 16
@@ -156,10 +164,13 @@ store_registers:
             sta buffer + 17
             lda #$20            ; ' ' character
             sta buffer + 18
-            dex                 ; Same as SP
-            lda $100,x
-            sta hi_hex
-            sta lo_hex
+            inx
+            inx
+            inx
+            inx
+            inx                 ; original value of SP
+            stx hi_hex
+            stx lo_hex
             jsr convert_to_hex
             lda hi_hex
             sta buffer + 19
@@ -170,6 +181,7 @@ store_registers:
             lda #$0A            ; '\n'
             sta buffer + 22
             stz buffer + 23     ; null terminated string
+            ply
             plx
             pla
             plp
@@ -190,8 +202,8 @@ convert_to_hex:
             tay
             lda hex_lookup,y
             sta lo_hex
-            ply
             pla
+            ply
             rts
 
 
