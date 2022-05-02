@@ -42,6 +42,7 @@ RS = %00100000
 
 !addr SERIAL_BUFFER = $0200
 
+prompt_ch = $AF
 
 
 reset:      ldx #$FF
@@ -60,7 +61,6 @@ reset:      ldx #$FF
 
 print_msg:  lda print_reg_msg,x
             beq print_reg
-            ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
             inx
             jmp print_msg
@@ -68,13 +68,12 @@ print_msg:  lda print_reg_msg,x
 print_reg:  ldx #0
 print_reg1: lda buffer,x
             beq print_prompt
-            ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
             inx
             jmp print_reg1
 
 print_prompt:
-            lda #$3E        ; '>'
+            lda #prompt_ch  ; '»'
             jsr put_chr
             lda #$20        ; ' '
             jsr put_chr
@@ -89,7 +88,7 @@ loop:       jsr poll_chr  ; read character from uart
             jsr print_ch  ; print the character to LCD
             lda lo_hex
             jsr print_ch  ; print the character to LCD
-            lda #$20            ; ' ' character
+            lda #$20      ; ' ' character
             jsr print_ch  ; print the character to LCD
             pla
             cmp #$0D      ; is it a '\r'
@@ -126,7 +125,7 @@ execute_stmt:
             jsr put_chr
             lda #$0A
             jsr put_chr
-            lda #$3E        ; '>'
+            lda #prompt_ch  ; '»'
             jsr put_chr
             lda #$20        ; ' '
             jsr put_chr
