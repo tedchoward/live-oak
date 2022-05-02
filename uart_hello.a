@@ -27,17 +27,20 @@ RW = %01000000
 RS = %00100000
 
 ; --- Zero Page ---
-!addr ticks  = $00  ; 4 bytes ($00 - $03)
-!addr wait   = $04
-!addr a_reg  = $05
-!addr x_reg  = $05
-!addr y_reg  = $06
-!addr s_reg  = $07
-!addr sp_reg = $08
-!addr pc_reg = $09  ; 2 bytes ($09 - $0A)
-!addr buffer = $0B  ; 22 bytes ($0B - $22)
-!addr hi_hex = $23
-!addr lo_hex = $24
+!addr ticks     = $00  ; 4 bytes ($00 - $03)
+!addr wait      = $04
+!addr a_reg     = $05
+!addr x_reg     = $05
+!addr y_reg     = $06
+!addr s_reg     = $07
+!addr sp_reg    = $08
+!addr pc_reg    = $09  ; 2 bytes ($09 - $0A)
+!addr buffer    = $0B  ; 22 bytes ($0B - $22)
+!addr hi_hex    = $23
+!addr lo_hex    = $24
+!addr sbuf_eof  = $25
+
+!addr SERIAL_BUFFER = $0200
 
 
 
@@ -72,6 +75,14 @@ print_reg1: lda buffer,x
 
 loop:       jsr poll_chr  ; read character from uart
             bcc +         ; if a character was read,
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            jsr print_ch  ; print the character to LCD
+            lda lo_hex
+            jsr print_ch  ; print the character to LCD
+            lda #$20            ; ' ' character
             jsr print_ch  ; print the character to LCD
 +           jmp loop
 
@@ -280,6 +291,7 @@ uart_init:  lda #%00011110  ; 1 stop bit; WL=8; baud; 9600
             sta ACIA_CONTROL
             lda #%00001011  ; no parity; echo off; interrupt off; DTR active low
             sta ACIA_COMMAND
+            stz sbuf_eof
             rts
 
 put_chr:    sta ACIA_DATA
