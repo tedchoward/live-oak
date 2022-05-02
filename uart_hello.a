@@ -41,7 +41,7 @@ RS = %00100000
 
 
 
-reset:      ldx $FF
+reset:      ldx #$FF
             txs
 
             jsr uart_init
