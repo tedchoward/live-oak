@@ -67,14 +67,21 @@ print_msg:  lda print_reg_msg,x
 
 print_reg:  ldx #0
 print_reg1: lda buffer,x
-            beq loop
+            beq print_prompt
             ; jsr print_ch  ; send the character to the LCD
             jsr put_chr   ; send the character to the UART
             inx
             jmp print_reg1
 
+print_prompt:
+            lda #$3E        ; '>'
+            jsr put_chr
+            lda #$20        ; ' '
+            jsr put_chr
+
 loop:       jsr poll_chr  ; read character from uart
             bcc +         ; if a character was read,
+            pha
             sta hi_hex
             sta lo_hex
             jsr convert_to_hex
@@ -84,6 +91,15 @@ loop:       jsr poll_chr  ; read character from uart
             jsr print_ch  ; print the character to LCD
             lda #$20            ; ' ' character
             jsr print_ch  ; print the character to LCD
+            pla
+            cmp #$0D      ; is it a '\r'
+            bne buffer_ch
+            jsr execute_stmt
+            jmp loop
+buffer_ch:  ldx sbuf_eof
+            sta SERIAL_BUFFER,x
+            inc sbuf_eof
+            jsr put_chr
 +           jmp loop
 
 wait_tick:  pha
@@ -93,6 +109,28 @@ wait_tick:  pha
             cmp wait
             beq -
             pla
+            rts
+
+execute_stmt:
+            lda #$0D
+            jsr put_chr
+            lda #$0A
+            jsr put_chr
+            ldx #0
+-           lda SERIAL_BUFFER,x
+            jsr put_chr
+            inx
+            cpx sbuf_eof
+            bne -
+            lda #$0D
+            jsr put_chr
+            lda #$0A
+            jsr put_chr
+            lda #$3E        ; '>'
+            jsr put_chr
+            lda #$20        ; ' '
+            jsr put_chr
+            stz sbuf_eof
             rts
 
 ; sprintf(buffer, "; %4x %2x %2x %2 %2x %2x\n", pc, sr, ac, xr, yr, sp);
