@@ -57,19 +57,25 @@ reset:      ldx #$FF
             ldx #$5A
             ldy #$B7
 
-            jsr store_registers
-
-            lda #<print_reg_msg
+            lda #<welcome
             sta str_vec
-            lda #>print_reg_msg
+            lda #>welcome
             sta str_vec + 1
             jsr print_str
 
-            lda #<buffer
-            sta str_vec
-            lda #>buffer
-            sta str_vec + 1
-            jsr print_str
+            ; jsr store_registers
+
+            ; lda #<print_reg_msg
+            ; sta str_vec
+            ; lda #>print_reg_msg
+            ; sta str_vec + 1
+            ; jsr print_str
+
+            ; lda #<buffer
+            ; sta str_vec
+            ; lda #>buffer
+            ; sta str_vec + 1
+            ; jsr print_str
 
 print_prompt:
             lda #prompt_ch  ; '»'
@@ -124,23 +130,44 @@ print_str:  phy
             rts
 
 execute_stmt:
-            lda #$0D
+            lda #$0D              ; '/r'
             jsr put_chr
-            lda #$0A
+            lda #$0A              ; '/n'
             jsr put_chr
-            ldx #0
--           lda SERIAL_BUFFER,x
-            jsr put_chr
+
+            ldx sbuf_eof          ; null-terminate `SERIAL_BUFFER`
+            stz SERIAL_BUFFER,x   ; so we can use `print_str`
+
+            ldx #0                ; if the buffer is empty,
+            cpx sbuf_eof          ; do nothing and print another prompt
+            beq .print_prompt
+
+            lda SERIAL_BUFFER,x   ; get the first character
+            cmp #"r"
+            bne .print_buf        ; "r" is currently the only known command
+
             inx
-            cpx sbuf_eof
-            bne -
-            lda #$0D
+            lda SERIAL_BUFFER,x   ; get the second character
+            bne .print_buf        ; if there's anything after the "r", this is
+                                  ; not the print_registers command
+            jsr store_registers
+            jsr print_registers
+            jmp .print_prompt
+
+.print_buf: lda #<SERIAL_BUFFER
+            sta str_vec
+            lda #>SERIAL_BUFFER
+            sta str_vec + 1
+            jsr print_str
+
+            lda #$0D              ; '/r'
             jsr put_chr
-            lda #$0A
+            lda #$0A              ; '/n'
             jsr put_chr
-            lda #prompt_ch  ; '»'
+.print_prompt:
+            lda #prompt_ch        ; '»'
             jsr put_chr
-            lda #$20        ; ' '
+            lda #$20              ; ' '
             jsr put_chr
             stz sbuf_eof
             rts
@@ -246,6 +273,22 @@ store_registers:
             plx
             pla
             plp
+            rts
+
+print_registers:
+            pha
+            lda #<print_reg_msg
+            sta str_vec
+            lda #>print_reg_msg
+            sta str_vec + 1
+            jsr print_str
+
+            lda #<buffer
+            sta str_vec
+            lda #>buffer
+            sta str_vec + 1
+            jsr print_str
+            pla
             rts
 
 convert_to_hex:
