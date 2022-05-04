@@ -39,6 +39,7 @@ RS = %00100000
 !addr hi_hex    = $23
 !addr lo_hex    = $24
 !addr sbuf_eof  = $25
+!addr str_vec   = $26 ; 2 bytes ($26 - $27)
 
 !addr SERIAL_BUFFER = $0200
 
@@ -57,20 +58,18 @@ reset:      ldx #$FF
             ldy #$B7
 
             jsr store_registers
-            ldx #0
 
-print_msg:  lda print_reg_msg,x
-            beq print_reg
-            jsr put_chr   ; send the character to the UART
-            inx
-            jmp print_msg
+            lda #<print_reg_msg
+            sta str_vec
+            lda #>print_reg_msg
+            sta str_vec + 1
+            jsr print_str
 
-print_reg:  ldx #0
-print_reg1: lda buffer,x
-            beq print_prompt
-            jsr put_chr   ; send the character to the UART
-            inx
-            jmp print_reg1
+            lda #<buffer
+            sta str_vec
+            lda #>buffer
+            sta str_vec + 1
+            jsr print_str
 
 print_prompt:
             lda #prompt_ch  ; '»'
@@ -108,6 +107,20 @@ wait_tick:  pha
             cmp wait
             beq -
             pla
+            rts
+
+; Prints a null terminated string to the UART
+; String location should be stored in vector str_vec
+print_str:  phy
+            pha
+            ldy #$00
+-           lda (str_vec),y
+            beq +
+            jsr put_chr   ; send the character to the UART
+            iny
+            jmp -
++           pla
+            ply
             rts
 
 execute_stmt:
@@ -256,6 +269,7 @@ convert_to_hex:
 
 
 
+welcome:    !raw "I'm a computer!\r\n\0"
 message:    !raw "Hello, world!\0"
 
 hex_lookup: !raw "0123456789ABCDEF"
