@@ -40,6 +40,8 @@ RS = %00100000
 !addr lo_hex    = $24
 !addr sbuf_eof  = $25
 !addr str_vec   = $26 ; 2 bytes ($26 - $27)
+!addr start_adr = $28 ; 2 bytes ($28 - $29)
+!addr length    = $2A
 
 !addr SERIAL_BUFFER = $0200
 
@@ -52,6 +54,23 @@ reset:      ldx #$FF
             jsr uart_init
             jsr timer_init
             jsr lcd_init
+
+            lda #$01
+            sta $3000
+            lda #$02
+            sta $3001
+            lda #$03
+            sta $3002
+            lda #$04
+            sta $3003
+            lda #$05
+            sta $3004
+            lda #$06
+            sta $3005
+            lda #$07
+            sta $3006
+            lda #$08
+            sta $3007
 
             lda #$10
             ldx #$5A
@@ -144,7 +163,7 @@ execute_stmt:
 
             lda SERIAL_BUFFER,x   ; get the first character
             cmp #"r"
-            bne .print_buf        ; "r" is currently the only known command
+            bne .print_mem        ; if not "r" skip to next command
 
             inx
             lda SERIAL_BUFFER,x   ; get the second character
@@ -152,6 +171,45 @@ execute_stmt:
                                   ; not the print_registers command
             jsr store_registers
             jsr print_registers
+            jmp .print_prompt
+
+.print_mem: cmp #"m"              ; syntax: `m <address> [<length>]`
+            bne .print_buf        ; if not "m" skip to next command
+            ; parse arguments
+            inx
+            lda SERIAL_BUFFER,x
+            cmp #" "
+            bne .print_buf
+            inx
+            lda SERIAL_BUFFER,x
+            sta hi_hex
+            inx
+            lda SERIAL_BUFFER,x
+            sta lo_hex
+            jsr from_hex
+            sta start_adr+1
+            inx
+            lda SERIAL_BUFFER,x
+            sta hi_hex
+            inx
+            lda SERIAL_BUFFER,x
+            sta lo_hex
+            jsr from_hex
+            sta start_adr
+            inx
+            lda SERIAL_BUFFER,x
+            beq .print_buf
+            cmp #" "
+            bne .print_buf
+            inx
+            lda SERIAL_BUFFER,x
+            sta hi_hex
+            inx
+            lda SERIAL_BUFFER,x
+            sta lo_hex
+            jsr from_hex
+            sta length
+            jsr print_memory
             jmp .print_prompt
 
 .print_buf: lda #<SERIAL_BUFFER
@@ -291,6 +349,30 @@ print_registers:
             pla
             rts
 
+; prints `length` (8-bits) bytes starting at `start_adr` (16-bits)
+
+print_memory:
+            phy
+            pha
+            ldy #$00
+-           lda (start_adr),y
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            jsr put_chr
+            lda lo_hex
+            jsr put_chr
+            lda #$20            ; ' ' character
+            jsr put_chr
+            iny
+            cpy length
+            bne -
+            pla
+            ply
+            rts
+
+
 convert_to_hex:
             phy
             pha
@@ -311,14 +393,51 @@ convert_to_hex:
             rts
 
 
+; convert the 2-digit hexadecimal string stored in hi_hex and lo_hex to it's
+; value. Stores the result in A
+from_hex:   lda hi_hex
+            jsr from_hex_digit
+            asl
+            asl
+            asl
+            asl
+            sta hi_hex
+            lda lo_hex
+            jsr from_hex_digit
+            ora hi_hex
+            rts
+
+; Convert the value in A from a hexadecimal digit string to it's value
+from_hex_digit:
+            phx
+            tax
+            sec
+            sbc #$61      ; 'a'
+            bcs .af       ; if >= 0 goto .af
+            sec           ; else try uppercase
+            txa
+            sbc #$41      ; 'A'
+            bcs .af       ; if >= 0 goto .af
+            sec           ; else try '0'-'9'
+            txa
+            sbc #$30      ; '0'
+            bcc .err      ; if < 0 goto err
+            clc
+            jmp .end
+.af:        adc #$0A
+            cmp #$10      ; if <= $10 we have a valid byte
+            bcc .end      ; else not A-F
+.err:       sec           ; set the carry flag to indicate an error
+.end        plx
+            rts
+
 
 welcome:    !raw "I'm a computer!\r\n\0"
-message:    !raw "Hello, world!\0"
 
 hex_lookup: !raw "0123456789ABCDEF"
 
 print_reg_msg:
-            !raw "   pc  sr ac xr yr sp   v1.0.0\r\n\0"
+            !raw "   pc  sr ac xr yr sp\r\n\0"
 
 
 lcd_init:   lda #%11111111  ; Set all pins on port B to output
