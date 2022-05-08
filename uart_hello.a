@@ -354,6 +354,26 @@ print_registers:
 print_memory:
             phy
             pha
+            lda start_adr+1
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            jsr put_chr
+            lda lo_hex
+            jsr put_chr
+            lda start_adr
+            sta hi_hex
+            sta lo_hex
+            jsr convert_to_hex
+            lda hi_hex
+            jsr put_chr
+            lda lo_hex
+            jsr put_chr
+            lda #":"
+            jsr put_chr
+            lda #" "
+            jsr put_chr
             ldy #$00
 -           lda (start_adr),y
             sta hi_hex
@@ -424,11 +444,12 @@ from_hex_digit:
             bcc .err      ; if < 0 goto err
             clc
             jmp .end
-.af:        adc #$0A
+.af:        clc
+            adc #$0A
             cmp #$10      ; if <= $10 we have a valid byte
             bcc .end      ; else not A-F
 .err:       sec           ; set the carry flag to indicate an error
-.end        plx
+.end:       plx
             rts
 
 
