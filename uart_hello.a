@@ -354,6 +354,23 @@ print_registers:
 print_memory:
             phy
             pha
+            ldy #$00
+
+            ; add the current index to the start address
+            ; this is used for printing the start address of each line
+.prt_line:  lda #"\r"
+            jsr put_chr
+            lda #"\n"
+            jsr put_chr
+            ldx #$00
+            clc
+            tya
+            adc start_adr
+            sta start_adr
+            lda #$00
+            adc start_adr+1
+            sta start_adr+1
+
             lda start_adr+1
             sta hi_hex
             sta lo_hex
@@ -374,8 +391,9 @@ print_memory:
             jsr put_chr
             lda #" "
             jsr put_chr
-            ldy #$00
--           lda (start_adr),y
+.prt_byte:  cpx #$08
+            beq .prt_line
+            lda (start_adr),y
             sta hi_hex
             sta lo_hex
             jsr convert_to_hex
@@ -386,8 +404,13 @@ print_memory:
             lda #$20            ; ' ' character
             jsr put_chr
             iny
+            inx
             cpy length
-            bne -
+            bne .prt_byte
+            lda #"\r"
+            jsr put_chr
+            lda #"\n"
+            jsr put_chr
             pla
             ply
             rts
