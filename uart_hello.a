@@ -457,17 +457,13 @@ from_hex:   lda hi_hex
 
 ; Convert the value in A from a hexadecimal digit string to it's value
 from_hex_digit:
-            phx
-            tax
+            sta a_reg
+            and #$DF      ; clear bit 5. Will make an lowercase letter uppercase
             sec
-            sbc #$61      ; 'a'
-            bcs .af       ; if >= 0 goto .af
-            sec           ; else try uppercase
-            txa
             sbc #$41      ; 'A'
             bcs .af       ; if >= 0 goto .af
             sec           ; else try '0'-'9'
-            txa
+            lda a_reg
             sbc #$30      ; '0'
             bcc .err      ; if < 0 goto err
             clc
@@ -477,8 +473,8 @@ from_hex_digit:
             cmp #$10      ; if <= $10 we have a valid byte
             bcc .end      ; else not A-F
 .err:       sec           ; set the carry flag to indicate an error
-.end:       plx
-            rts
+.end:       rts
+
 
 
 welcome:    !raw "I'm a computer!\r\n\0"
