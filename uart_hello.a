@@ -45,11 +45,25 @@ RS = %00100000
 
 !addr SERIAL_BUFFER = $0200
 
+!addr STRING_BUFFER = $0300
+
 prompt_ch = $AF
 
 
 reset:      ldx #$FF
             txs
+
+            ; initialize serial buffer
+            ldx #$00
+.clr_ser:   stz SERIAL_BUFFER,x
+            inx
+            bne .clr_ser
+
+            ; initialize string buffer
+            ldx #$00
+.clr_str:   stz STRING_BUFFER,x
+            inx
+            bne .clr_str
 
             jsr uart_init
             jsr timer_init
@@ -351,6 +365,22 @@ print_registers:
 
 ; prints `length` (8-bits) bytes starting at `start_adr` (16-bits)
 
+print_ascii:
+            lda #":"
+            jsr put_chr
+            lda #" "
+            jsr put_chr
+
+            stz STRING_BUFFER,x
+
+            lda #<STRING_BUFFER
+            sta str_vec
+            lda #>STRING_BUFFER
+            sta str_vec + 1
+            jsr print_str
+            rts
+
+
 print_memory:
             phy
             pha
@@ -364,6 +394,12 @@ print_memory:
             sta a_reg
             cpy a_reg
             bne .prt_byte
+
+            lda STRING_BUFFER
+            beq .start_ln
+            jsr print_ascii
+
+.start_ln   ldx #$00
             lda #"\r"
             jsr put_chr
             lda #"\n"
@@ -401,6 +437,8 @@ print_memory:
             lda (start_adr),y
             sta hi_hex
             sta lo_hex
+            jsr clean_byte
+            sta STRING_BUFFER,x
             jsr convert_to_hex
             lda hi_hex
             jsr put_chr
@@ -412,6 +450,19 @@ print_memory:
             inx
             cpy length
             bne .prt_line
+
+.pad:       cpx #$08
+            beq +
+            lda #" "
+            jsr put_chr
+            jsr put_chr
+            jsr put_chr
+            inx
+            jmp .pad
+
++           jsr print_ascii
+            stz STRING_BUFFER
+
             lda #"\r"
             jsr put_chr
             lda #"\n"
@@ -475,7 +526,18 @@ from_hex_digit:
 .err:       sec           ; set the carry flag to indicate an error
 .end:       rts
 
-
+; If the value in A is a printable ASCII character, do nothing. Otherwise
+;   replace the value in A with "."
+clean_byte:
+            sec
+            cmp #$20      ; first non-control character
+            bcs .not_ctrl
+            lda #"."
+.not_ctrl:  sec
+            cmp #$7F
+            bne .return
+            lda #"."
+.return     rts
 
 welcome:    !raw "I'm a computer!\r\n\0"
 
