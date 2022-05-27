@@ -50,79 +50,55 @@
     prompt_ch = $AF
 
 reset:
-    ldx #$FF
+    ldx #$FF            ; initialize the stack pointer
     txs
 
-    ; initialize serial buffer
-    ldx #$00
-
-.clr_ser:
-    stz SERIAL_BUFFER,x
-    inx
-    bne .clr_ser
-
-    ; initialize string buffer
-    ldx #$00
-
-.clr_str:
-    stz STRING_BUFFER,x
-    inx
-    bne .clr_str
+    stz SERIAL_BUFFER   ; initialize serial buffer
+    stz STRING_BUFFER   ; initialize string buffer
 
     jsr uart_init
     jsr timer_init
     jsr lcd_init
 
+    ; set some values into memory for testing
     lda #$01
     sta $3000
-    lda #$02
+    inc
     sta $3001
-    lda #$03
+    inc
     sta $3002
-    lda #$04
+    inc
     sta $3003
-    lda #$05
+    inc
     sta $3004
-    lda #$06
+    inc
     sta $3005
-    lda #$07
+    inc
     sta $3006
-    lda #$08
+    inc
     sta $3007
 
+    ; set some values in the registers for testing
     lda #$10
     ldx #$5A
     ldy #$B7
 
+    ; print the welcome message
     lda #<welcome
     sta str_vec
     lda #>welcome
     sta str_vec + 1
     jsr print_str
 
-    ; jsr store_registers
-
-    ; lda #<print_reg_msg
-    ; sta str_vec
-    ; lda #>print_reg_msg
-    ; sta str_vec + 1
-    ; jsr print_str
-
-    ; lda #<buffer
-    ; sta str_vec
-    ; lda #>buffer
-    ; sta str_vec + 1
-    ; jsr print_str
-
-print_prompt:
+    ; print the prompt
     lda #prompt_ch  ; '»'
     jsr put_chr
-    lda #$20        ; ' '
+    lda #" "
     jsr put_chr
 
 loop:
     jsr poll_chr  ; read character from uart
-    bcc +         ; if a character was read,
+    bcc loop      ; if a character was read,
     pha
     sta hi_hex
     sta lo_hex
@@ -144,7 +120,7 @@ buffer_ch:
     sta SERIAL_BUFFER,x
     inc sbuf_eof
     jsr put_chr
-+   jmp loop
+    jmp loop
 
 wait_tick:
     pha
@@ -171,102 +147,49 @@ print_str:
     ply
     rts
 
+!zone CommandParser
+
 execute_stmt:
-    lda #$0D              ; '/r'
+    lda #"\r"
     jsr put_chr
-    lda #$0A              ; '/n'
+    lda #"\n"
     jsr put_chr
 
-    ldx sbuf_eof          ; null-terminate `SERIAL_BUFFER`
-    stz SERIAL_BUFFER,x   ; so we can use `print_str`
+    ldx sbuf_eof            ; null-terminate `SERIAL_BUFFER`
+    stz SERIAL_BUFFER,x     ; so we can use `print_str`
 
-    ldx #0                ; if the buffer is empty,
-    cpx sbuf_eof          ; do nothing and print another prompt
+    ldx #0                  ; if the buffer is empty,
+    cpx sbuf_eof            ; do nothing and print another prompt
     beq .print_prompt
 
-    lda SERIAL_BUFFER,x   ; get the first character
+    lda SERIAL_BUFFER,x     ; get the first character
     cmp #"r"
-    bne .print_mem        ; if not "r" skip to next command
+    bne .print_mem          ; if not "r" skip to next command
 
     inx
-    lda SERIAL_BUFFER,x   ; get the second character
-    bne .print_buf        ; if there's anything after the "r", this is
+    lda SERIAL_BUFFER,x     ; get the second character
+    bne .print_buf          ; if there's anything after the "r", this is
                             ; not the print_registers command
     jsr store_registers
     jsr print_registers
     jmp .print_prompt
-
 .print_mem:
     cmp #"m"              ; syntax: `m <address> [<length>]`
     bne .write_mem        ; if not "m" skip to next command
     ; parse arguments
-    inx
-    lda SERIAL_BUFFER,x
-    cmp #" "
-    bne .print_buf
-    inx
-    lda SERIAL_BUFFER,x
-    sta hi_hex
-    inx
-    lda SERIAL_BUFFER,x
-    sta lo_hex
-    jsr from_hex
-    sta start_adr+1
-    inx
-    lda SERIAL_BUFFER,x
-    sta hi_hex
-    inx
-    lda SERIAL_BUFFER,x
-    sta lo_hex
-    jsr from_hex
-    sta start_adr
-    inx
-    lda SERIAL_BUFFER,x
-    beq .print_buf
-    cmp #" "
-    bne .print_buf
-    inx
-    lda SERIAL_BUFFER,x
-    sta hi_hex
-    inx
-    lda SERIAL_BUFFER,x
-    sta lo_hex
-    jsr from_hex
-    sta length
+    jsr .parse_args_m
+    bcs .print_buf
     jsr print_memory
     jmp .print_prompt
-
 .write_mem
     cmp #"w"              ; syntax: `w <address> <byte>[<byte>*]`
     bne .print_buf        ; if not "w", skip to next command
     ; parse arguments
-    inx
-    lda SERIAL_BUFFER,x
-    cmp #" "              ; chomp " "
-    bne .print_buf
-    inx
-    lda SERIAL_BUFFER,x   ; load high nibble
-    sta hi_hex
-    inx
-    lda SERIAL_BUFFER,x   ; load low nibble
-    sta lo_hex
-    jsr from_hex
-    sta start_adr+1       ; store high byte of start address
-    inx
-    lda SERIAL_BUFFER,x   ; load high nibble
-    sta hi_hex
-    inx
-    lda SERIAL_BUFFER,x   ; load low nibble
-    sta lo_hex
-    jsr from_hex
-    sta start_adr         ; store low byte of start address
-    inx
-    cmp #" "
-    bne .print_buf
+    jsr .parse_args_w
+    bcs .print_buf
     ; start writing memory
     inx
     lda SERIAL_BUFFER,x   ; load high nibble
-
 .write_byte
     sta hi_hex
     inx
@@ -281,7 +204,6 @@ execute_stmt:
     lda SERIAL_BUFFER,x   ; load high nibble
     bne .write_byte
     jmp .print_prompt
-
 .print_buf:
     lda #<SERIAL_BUFFER
     sta str_vec
@@ -300,6 +222,90 @@ execute_stmt:
     jsr put_chr
     stz sbuf_eof
     rts
+
+.parse_args_m:
+    ; parse arguments
+    inx
+    lda SERIAL_BUFFER,x
+    cmp #" "
+    sec
+    bne .pam_end
+    inx
+    lda SERIAL_BUFFER,x
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x
+    sta lo_hex
+    jsr from_hex
+    sta start_adr+1
+    inx
+    lda SERIAL_BUFFER,x
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x
+    sta lo_hex
+    jsr from_hex
+    sta start_adr
+    inx
+    lda SERIAL_BUFFER,x
+    sec
+    beq .pam_end
+    cmp #" "
+    sec
+    bne .pam_end
+    inx
+    lda SERIAL_BUFFER,x
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x
+    sta lo_hex
+    jsr from_hex
+    sta length
+    clc
+.pam_end:
+   rts
+
+.parse_args_w:
+    ; parse arguments
+    inx
+    lda SERIAL_BUFFER,x
+    cmp #" "              ; chomp " "
+    sec
+    bne .paw_end
+    inx
+    lda SERIAL_BUFFER,x   ; load high nibble
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x   ; load low nibble
+    sta lo_hex
+    jsr from_hex
+    sta start_adr+1       ; store high byte of start address
+    inx
+    lda SERIAL_BUFFER,x   ; load high nibble
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x   ; load low nibble
+    sta lo_hex
+    jsr from_hex
+    sta start_adr         ; store low byte of start address
+    inx
+    lda SERIAL_BUFFER,x
+    cmp #" "
+    sec
+    bne .paw_end
+    clc
+.paw_end:
+    rts
+
+; debug:
+;     pha
+;     lda #<debug_text
+;     sta str_vec
+;     lda #>debug_text
+;     sta str_vec + 1
+;     jsr print_str
+;     pla
+;     rts
 
 ; sprintf(buffer, "; %4x %2x %2x %2 %2x %2x\n", pc, sr, ac, xr, yr, sp);
 store_registers:
@@ -611,6 +617,9 @@ hex_lookup:
 
 print_reg_msg:
     !raw "   pc  sr ac xr yr sp\r\n\0"
+
+; debug_text:
+;     !raw "\r\ndebug\r\n\0"
 
 lcd_init:
     lda #%11111111  ; Set all pins on port B to output
