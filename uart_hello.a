@@ -91,6 +91,7 @@ reset:
     jsr print_str
 
     ; print the prompt
+print_prompt:
     lda #prompt_ch  ; '»'
     jsr put_chr
     lda #" "
@@ -110,6 +111,10 @@ loop:
     lda #$20      ; ' ' character
     jsr print_ch  ; print the character to LCD
     pla
+    cmp #$03      ; it it CTRL-C ?
+    bne .case_cr
+    brk
+.case_cr:
     cmp #$0D      ; is it a '\r'
     bne buffer_ch
     jsr execute_stmt
@@ -117,9 +122,14 @@ loop:
 
 buffer_ch:
     ldx sbuf_eof
+    cmp #$08                ; backspace
+    bne .store_ch
+    dec sbuf_eof
+    bra +
+.store_ch:
     sta SERIAL_BUFFER,x
     inc sbuf_eof
-    jsr put_chr
++   jsr put_chr
     jmp loop
 
 wait_tick:
@@ -170,7 +180,15 @@ execute_stmt:
     lda SERIAL_BUFFER,x     ; get the second character
     bne .print_buf          ; if there's anything after the "r", this is
                             ; not the print_registers command
+    php
+    pha
+    phx
+    phy
     jsr store_registers
+    ply
+    plx
+    pla
+    plp
     jsr print_registers
     jmp .print_prompt
 .print_mem:
@@ -309,21 +327,19 @@ execute_stmt:
 
 ; sprintf(buffer, "; %4x %2x %2x %2 %2x %2x\n", pc, sr, ac, xr, yr, sp);
 store_registers:
-    php
-    pha
-    phx
-    phy
     lda #$3B            ; ';' character
     sta buffer
     lda #$20            ; ' ' character
     sta buffer + 1
     tsx
+    inx                 ; now pointing at PC (low)
+    inx                 ; now pointing at PC (high)
     inx                 ; now pointing at Y
     inx                 ; now pointing at X
     inx                 ; now pointing at A
     inx                 ; now pointing at SR
-    inx                 ; now pointing at PC (low)
-    inx                 ; now pointing at PC (high)
+    inx                 ; now pointing at orig PC (low)
+    inx                 ; now pointing at orig PC (high)
     lda $100,x          ; high byte of PC
     sta hi_hex
     sta lo_hex
@@ -404,10 +420,6 @@ store_registers:
     lda #$0A            ; '\n'
     sta buffer + 22
     stz buffer + 23     ; null terminated string
-    ply
-    plx
-    pla
-    plp
     rts
 
 print_registers:
@@ -735,8 +747,33 @@ irq:
     inc ticks + 2
     bne +
     inc ticks + 3
-+   rti
++   ply             ; restore registers
+    plx
+    pla
+    rti
+
+break:
+    jsr store_registers
+    cli
+    lda #$07        ; BELL
+    jsr put_chr
+    jsr print_registers
+    ply
+    plx
+    pla
+    jmp print_prompt
+
+irq_brk:
+    pha
+    phx
+    phy
+    tsx
+    lda $104,x      ; load status register
+    and #$10        ; is the break flag set?
+    beq +
+    jmp break
++   jmp irq
 
     * = $FFFC
     !word reset
-    !word irq
+    !word irq_brk
