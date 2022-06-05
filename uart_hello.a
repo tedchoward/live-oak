@@ -29,19 +29,21 @@
 ; --- Zero Page ---
     !addr ticks     = $00  ; 4 bytes ($00 - $03)
     !addr wait      = $04
-    !addr a_reg     = $05
-    !addr x_reg     = $05
-    !addr y_reg     = $06
+    !addr pc_reg_hi = $05
+    !addr pc_reg_lo = $06
     !addr s_reg     = $07
-    !addr sp_reg    = $08
-    !addr pc_reg    = $09  ; 2 bytes ($09 - $0A)
-    !addr buffer    = $0B  ; 22 bytes ($0B - $22)
-    !addr hi_hex    = $23
-    !addr lo_hex    = $24
-    !addr sbuf_eof  = $25
-    !addr str_vec   = $26 ; 2 bytes ($26 - $27)
-    !addr start_adr = $28 ; 2 bytes ($28 - $29)
-    !addr length    = $2A
+    !addr a_reg     = $08
+    !addr x_reg     = $09
+    !addr y_reg     = $0A
+    !addr sp_reg    = $0B
+
+    !addr buffer    = $0C  ; 22 bytes ($0C - $23)
+    !addr hi_hex    = $24
+    !addr lo_hex    = $25
+    !addr sbuf_eof  = $26
+    !addr str_vec   = $27 ; 2 bytes ($27 - $28)
+    !addr start_adr = $29 ; 2 bytes ($29 - $2A)
+    !addr length    = $2B
 
     !addr SERIAL_BUFFER = $0200
 
@@ -89,9 +91,11 @@ reset:
     lda #>welcome
     sta str_vec + 1
     jsr print_str
+    brk             ; trigger a break to grab the processor state
 
     ; print the prompt
 print_prompt:
+    stz sbuf_eof
     lda #prompt_ch  ; '»'
     jsr put_chr
     lda #" "
@@ -117,8 +121,7 @@ loop:
 .case_cr:
     cmp #$0D      ; is it a '\r'
     bne buffer_ch
-    jsr execute_stmt
-    jmp loop
+    jmp execute_stmt
 
 buffer_ch:
     ldx sbuf_eof
@@ -170,7 +173,7 @@ execute_stmt:
 
     ldx #0                  ; if the buffer is empty,
     cpx sbuf_eof            ; do nothing and print another prompt
-    beq .print_prompt
+    beq print_prompt
 
     lda SERIAL_BUFFER,x     ; get the first character
     cmp #"r"
@@ -180,17 +183,8 @@ execute_stmt:
     lda SERIAL_BUFFER,x     ; get the second character
     bne .print_buf          ; if there's anything after the "r", this is
                             ; not the print_registers command
-    php
-    pha
-    phx
-    phy
-    jsr store_registers
-    ply
-    plx
-    pla
-    plp
     jsr print_registers
-    jmp .print_prompt
+    jmp print_prompt
 .print_mem:
     cmp #"m"              ; syntax: `m <address> [<length>]`
     bne .write_mem        ; if not "m" skip to next command
@@ -198,10 +192,10 @@ execute_stmt:
     jsr .parse_args_m
     bcs .print_buf
     jsr print_memory
-    jmp .print_prompt
+    jmp print_prompt
 .write_mem
     cmp #"w"              ; syntax: `w <address> <byte>[<byte>*]`
-    bne .print_buf        ; if not "w", skip to next command
+    bne .go_to        ; if not "w", skip to next command
     ; parse arguments
     jsr .parse_args_w
     bcs .print_buf
@@ -221,7 +215,27 @@ execute_stmt:
 +   inx
     lda SERIAL_BUFFER,x   ; load high nibble
     bne .write_byte
-    jmp .print_prompt
+    jmp print_prompt
+.go_to:
+    cmp #"g"
+    bne .go_sub
+    jsr .parse_args_g
+    jmp goto
+.go_sub:
+    cmp #"j"
+    bne .print_buf
+    jsr .parse_args_g
+    ldx sp_reg              ; restore the stack pointer
+    txs
+    jsr .gt_2                ; same as goto command, but return here
+    sty y_reg               ; save the y register
+    stx x_reg               ; save the x register
+    sta a_reg               ; save the a register
+    php                     ; push the status register the stack
+    pla                     ; pull the status register
+    sta s_reg               ; save the status register
+    jsr print_registers
+    jmp print_prompt
 .print_buf:
     lda #<SERIAL_BUFFER
     sta str_vec
@@ -233,13 +247,6 @@ execute_stmt:
     jsr put_chr
     lda #$0A              ; '/n'
     jsr put_chr
-.print_prompt:
-    lda #prompt_ch        ; '»'
-    jsr put_chr
-    lda #$20              ; ' '
-    jsr put_chr
-    stz sbuf_eof
-    rts
 
 .parse_args_m:
     ; parse arguments
@@ -315,6 +322,33 @@ execute_stmt:
 .paw_end:
     rts
 
+.parse_args_g:
+    ; parse arguments
+    inx
+    lda SERIAL_BUFFER,x
+    cmp #" "              ; chomp " "
+    sec
+    bne .pag_end
+    inx
+    lda SERIAL_BUFFER,x   ; load high nibble
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x   ; load low nibble
+    sta lo_hex
+    jsr from_hex
+    sta start_adr+1       ; store high byte of start address
+    inx
+    lda SERIAL_BUFFER,x   ; load high nibble
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x   ; load low nibble
+    sta lo_hex
+    jsr from_hex
+    sta start_adr         ; store low byte of start address
+    clc
+.pag_end:
+    rts
+
 ; debug:
 ;     pha
 ;     lda #<debug_text
@@ -325,120 +359,41 @@ execute_stmt:
 ;     pla
 ;     rts
 
-; sprintf(buffer, "; %4x %2x %2x %2 %2x %2x\n", pc, sr, ac, xr, yr, sp);
-store_registers:
-    lda #$3B            ; ';' character
-    sta buffer
-    lda #$20            ; ' ' character
-    sta buffer + 1
-    tsx
-    inx                 ; now pointing at PC (low)
-    inx                 ; now pointing at PC (high)
-    inx                 ; now pointing at Y
-    inx                 ; now pointing at X
-    inx                 ; now pointing at A
-    inx                 ; now pointing at SR
-    inx                 ; now pointing at orig PC (low)
-    inx                 ; now pointing at orig PC (high)
-    lda $100,x          ; high byte of PC
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 2
-    lda lo_hex
-    sta buffer + 3
-    dex                 ; now pointing at PC (low)
-    lda $100,x          ; low byte of PC
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 4
-    lda lo_hex
-    sta buffer + 5
-    lda #$20            ; ' ' character
-    sta buffer + 6
-    dex                 ; now pointing at SR
-    lda $100,x
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 7
-    lda lo_hex
-    sta buffer + 8
-    lda #$20            ; ' ' character
-    sta buffer + 9
-    dex                 ; now pointing at A
-    lda $100,x
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 10
-    lda lo_hex
-    sta buffer + 11
-    lda #$20            ; ' ' character
-    sta buffer + 12
-    dex                 ; now pointing at X
-    lda $100,x
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 13
-    lda lo_hex
-    sta buffer + 14
-    lda #$20            ; ' ' character
-    sta buffer + 15
-    dex                 ; now pointing at Y
-    lda $100,x
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 16
-    lda lo_hex
-    sta buffer + 17
-    lda #$20            ; ' ' character
-    sta buffer + 18
-    inx
-    inx
-    inx
-    inx
-    inx                 ; original value of SP
-    stx hi_hex
-    stx lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    sta buffer + 19
-    lda lo_hex
-    sta buffer + 20
-    lda #$0D            ; '\r'
-    sta buffer + 21
-    lda #$0A            ; '\n'
-    sta buffer + 22
-    stz buffer + 23     ; null terminated string
-    rts
-
 print_registers:
-    pha
     lda #<print_reg_msg
     sta str_vec
     lda #>print_reg_msg
     sta str_vec + 1
     jsr print_str
 
-    lda #<buffer
-    sta str_vec
-    lda #>buffer
-    sta str_vec + 1
-    jsr print_str
-    pla
+    lda pc_reg_hi       ; print high-bit of PC
+    jsr put_hex
+
+    ldy #$01
+-   lda pc_reg_hi,y     ; starting with low-bit of PC
+    jsr put_hex         ; loop through the rest of the registers
+    lda #" "            ; print 1-byte value followed by a space
+    jsr put_chr
+    iny
+    cpy #$07            ; there are 5 registers to print
+    bcc -
+    lda #"\r"
+    jsr put_chr
+    lda #"\n"
+    jsr put_chr
     rts
 
 ; prints `length` (8-bits) bytes starting at `start_adr` (16-bits)
+
+put_hex:
+    sta hi_hex
+    sta lo_hex
+    jsr convert_to_hex
+    lda hi_hex
+    jsr put_chr
+    lda lo_hex
+    jsr put_chr
+    rts
 
 print_ascii:
     lda #":"
@@ -454,6 +409,23 @@ print_ascii:
     sta str_vec + 1
     jsr print_str
     rts
+
+
+goto:
+    ldx sp_reg              ; restore the stack pointer
+    txs
+.gt_2:
+    lda start_adr+1         ; push the high-byte of the goto address to the
+    pha                     ; stack. (RTI will think this is the value of PC)
+    lda start_adr
+    pha
+    sei                     ; disable interrupts
+    lda s_reg               ; restore the status register (RTI will set this)
+    pha
+    lda a_reg               ; restore the a register
+    ldx x_reg               ; restore the x register
+    ldy y_reg               ; restore the y register
+    rti                     ; restore s_reg and set PC to new address
 
 
 print_memory:
@@ -630,8 +602,19 @@ hex_lookup:
 print_reg_msg:
     !raw "   pc  sr ac xr yr sp\r\n\0"
 
+hello_msg:
+    !raw "Hello There!\r\n\0"
+
 ; debug_text:
 ;     !raw "\r\ndebug\r\n\0"
+
+say_hello:
+    lda #<hello_msg
+    sta str_vec
+    lda #>hello_msg
+    sta str_vec + 1
+    jsr print_str
+    rts
 
 lcd_init:
     lda #%11111111  ; Set all pins on port B to output
@@ -753,14 +736,21 @@ irq:
     rti
 
 break:
-    jsr store_registers
-    cli
+    ldx #$05        ; pull registers off the stack
+-   pla             ; order y_reg, x_reg, a_reg, s_reg, pc_reg
+    sta pc_reg_hi,x
+    dex
+    bpl -
+    cld             ; disable BCD mode (just in case)
+    tsx             ; store sp_reg in memory
+    stx sp_reg
+    cli             ; re-enable interrupts
+
     lda #$07        ; BELL
     jsr put_chr
+
     jsr print_registers
-    ply
-    plx
-    pla
+
     jmp print_prompt
 
 irq_brk:
