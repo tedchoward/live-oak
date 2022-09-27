@@ -5,6 +5,7 @@
     * = $8000
 
     !source "uart.a"
+    !source "xmodem.a"
 
 ; --- VIA Registers ---
     !addr PORTB = $6000
