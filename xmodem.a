@@ -24,7 +24,7 @@ xmodem:
     lda #$01
     sta blkno       ; set block # to 1
     sta bflag       ; set flag to get address from block 1
-.start_crc:
+.start_xmdm
     lda #NAK        ; send a NAK to indicate we are ready to receive
     jsr put_chr
     lda #$FF
@@ -32,7 +32,7 @@ xmodem:
     stz checksum
     jsr .get_byte   ; wait for input
     bcs .got_byte   ; byte received. process it
-    bcc .start_crc  ; resend NAK
+    bcc .start_xmdm ; resend NAK
 
 .start_blk:
     lda #$ff

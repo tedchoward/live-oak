@@ -1,6 +1,7 @@
 ; --- UART Hello ---
 
     !to "uart_hello.bin", plain
+    !sl "symbols.a"
     !cpu w65c02
     * = $8000
 
@@ -40,6 +41,8 @@
     !addr str_vec   = $27 ; 2 bytes ($27 - $28)
     !addr start_adr = $29 ; 2 bytes ($29 - $2A)
     !addr length    = $2B
+
+    !addr load_ptr  = $3A ; 2 bytes ($3A - $3B) for target load address
 
     !addr SERIAL_BUFFER = $0200
 
@@ -209,7 +212,7 @@ execute_stmt:
     jmp goto
 .go_sub:
     cmp #"j"
-    bne .print_buf
+    bne .load_xmodem
     jsr .parse_args_g
     ldx sp_reg              ; restore the stack pointer
     txs
@@ -221,6 +224,12 @@ execute_stmt:
     pla                     ; pull the status register
     sta s_reg               ; save the status register
     jsr print_registers
+    jmp print_prompt
+.load_xmodem:
+    cmp #"l"
+    bne .print_buf
+    jsr .parse_args_l
+    jsr xmodem
     jmp print_prompt
 .print_buf:
     lda #<SERIAL_BUFFER
@@ -333,6 +342,32 @@ execute_stmt:
     sta start_adr         ; store low byte of start address
     clc
 .pag_end:
+    rts
+
+.parse_args_l:
+    inx
+    lda SERIAL_BUFFER,x
+    cmp #" "                ; chomp " "
+    sec
+    bne .pal_end
+    inx
+    lda SERIAL_BUFFER,x     ; load high nibble
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x     ; load low nibble
+    sta lo_hex
+    jsr from_hex
+    sta load_ptr+1               ; store high byte of load address
+    inx
+    lda SERIAL_BUFFER,x     ; load high nibble
+    sta hi_hex
+    inx
+    lda SERIAL_BUFFER,x     ; load low nibble
+    sta lo_hex
+    jsr from_hex
+    sta load_ptr                 ; store low byte of load address
+    clc
+.pal_end:
     rts
 
 ; debug:
