@@ -43,6 +43,7 @@ Temporary Items
 # Built Visual Studio Code Extensions
 *.vsix
 
-## VASM ##
+## CA65 ##
 
-*.bin
+*.o
+kernel

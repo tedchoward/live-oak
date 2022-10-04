@@ -1,6 +1,6 @@
 root = true
 
-[*.{rb,a}]
+[*]
 charset = utf-8
 end_of_line = lf
 indent_size = 2
@@ -10,3 +10,7 @@ insert_final_newline = true
 
 [*.a]
 indent_size = 4
+
+[Makefile]
+indent_size = 4
+indent_style = tab

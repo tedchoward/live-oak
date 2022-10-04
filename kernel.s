@@ -1,23 +1,17 @@
 ; --- UART Hello ---
 
-    !to "uart_hello.bin", plain
-    !sl "symbols.a"
-    !cpu w65c02
-    * = $8000
-
-    !source "uart.a"
-    !source "xmodem.a"
+    .segment "CODE"
 
 ; --- VIA Registers ---
-    !addr PORTB = $6000
-    !addr PORTA = $6001
-    !addr DDRB  = $6002
-    !addr DDRA  = $6003
-    !addr T1CL  = $6004
-    !addr T1CH  = $6005
-    !addr ACR   = $600B
-    !addr IFR   = $600D
-    !addr IER   = $600E
+    PORTB = $6000
+    PORTA = $6001
+    DDRB  = $6002
+    DDRA  = $6003
+    T1CL  = $6004
+    T1CH  = $6005
+    ACR   = $600B
+    IFR   = $600D
+    IER   = $600E
 
 ; --- LCD Control Bits ---
     E  = %10000000
@@ -25,30 +19,35 @@
     RS = %00100000
 
 ; --- Zero Page ---
-    !addr ticks     = $00  ; 4 bytes ($00 - $03)
-    !addr pc_reg_hi = $05
-    !addr pc_reg_lo = $06
-    !addr s_reg     = $07
-    !addr a_reg     = $08
-    !addr x_reg     = $09
-    !addr y_reg     = $0A
-    !addr sp_reg    = $0B
+    ticks     = $00  ; 4 bytes ($00 - $03)
+    pc_reg_hi = $05
+    pc_reg_lo = $06
+    s_reg     = $07
+    a_reg     = $08
+    x_reg     = $09
+    y_reg     = $0A
+    sp_reg    = $0B
 
-    !addr buffer    = $0C  ; 22 bytes ($0C - $23)
-    !addr hi_hex    = $24
-    !addr lo_hex    = $25
-    !addr sbuf_eof  = $26
-    !addr str_vec   = $27 ; 2 bytes ($27 - $28)
-    !addr start_adr = $29 ; 2 bytes ($29 - $2A)
-    !addr length    = $2B
+    buffer    = $0C  ; 22 bytes ($0C - $23)
+    hi_hex    = $24
+    lo_hex    = $25
+    sbuf_eof  = $26
+    str_vec   = $27 ; 2 bytes ($27 - $28)
+    start_adr = $29 ; 2 bytes ($29 - $2A)
+    length    = $2B
 
-    !addr load_ptr  = $3A ; 2 bytes ($3A - $3B) for target load address
+    load_ptr  = $3A ; 2 bytes ($3A - $3B) for target load address
 
-    !addr SERIAL_BUFFER = $0200
+    SERIAL_BUFFER = $0200
 
-    !addr STRING_BUFFER = $0300
+    STRING_BUFFER = $0300
 
     prompt_ch = $AF
+    CR = $0d
+    LF = $0a
+
+
+    .import xmodem, poll_chr, put_chr, uart_init
 
 reset:
     ldx #$FF            ; initialize the stack pointer
@@ -97,7 +96,7 @@ print_prompt:
     stz sbuf_eof
     lda #prompt_ch  ; '»'
     jsr put_chr
-    lda #" "
+    lda #' '
     jsr put_chr
 
 loop:
@@ -115,9 +114,9 @@ loop:
     jsr print_ch  ; print the character to LCD
     pla
     cmp #$03      ; it it CTRL-C ?
-    bne .case_cr
+    bne case_cr
     brk
-.case_cr:
+case_cr:
     cmp #$0D      ; is it a '\r'
     bne buffer_ch
     jmp execute_stmt
@@ -125,13 +124,13 @@ loop:
 buffer_ch:
     ldx sbuf_eof
     cmp #$08                ; backspace
-    bne .store_ch
+    bne store_ch
     dec sbuf_eof
-    bra +
-.store_ch:
+    bra :+
+store_ch:
     sta SERIAL_BUFFER,x
     inc sbuf_eof
-+   jsr put_chr
+:   jsr put_chr
     jmp loop
 
 ; Prints a null terminated string to the UART
@@ -140,21 +139,19 @@ print_str:
     phy
     pha
     ldy #$00
--   lda (str_vec),y
-    beq +
+:   lda (str_vec),y
+    beq :+
     jsr put_chr   ; send the character to the UART
     iny
-    jmp -
-+   pla
+    jmp :-
+:   pla
     ply
     rts
 
-!zone CommandParser
-
 execute_stmt:
-    lda #"\r"
+    lda #CR
     jsr put_chr
-    lda #"\n"
+    lda #LF
     jsr put_chr
 
     ldx sbuf_eof            ; null-terminate `SERIAL_BUFFER`
@@ -165,33 +162,33 @@ execute_stmt:
     beq print_prompt
 
     lda SERIAL_BUFFER,x     ; get the first character
-    cmp #"r"
-    bne .print_mem          ; if not "r" skip to next command
+    cmp #'r'
+    bne print_mem          ; if not "r" skip to next command
 
     inx
     lda SERIAL_BUFFER,x     ; get the second character
-    bne .print_buf          ; if there's anything after the "r", this is
+    bne print_buf          ; if there's anything after the "r", this is
                             ; not the print_registers command
     jsr print_registers
     jmp print_prompt
-.print_mem:
-    cmp #"m"              ; syntax: `m <address> [<length>]`
-    bne .write_mem        ; if not "m" skip to next command
+print_mem:
+    cmp #'m'              ; syntax: `m <address> [<length>]`
+    bne write_mem        ; if not "m" skip to next command
     ; parse arguments
-    jsr .parse_args_m
-    bcs .print_buf
+    jsr parse_args_m
+    bcs print_buf
     jsr print_memory
     jmp print_prompt
-.write_mem
-    cmp #"w"              ; syntax: `w <address> <byte>[<byte>*]`
-    bne .go_to        ; if not "w", skip to next command
+write_mem:
+    cmp #'w'              ; syntax: `w <address> <byte>[<byte>*]`
+    bne go_to        ; if not "w", skip to next command
     ; parse arguments
-    jsr .parse_args_w
-    bcs .print_buf
+    jsr parse_args_w
+    bcs print_buf
     ; start writing memory
     inx
     lda SERIAL_BUFFER,x   ; load high nibble
-.write_byte
+write_byte:
     sta hi_hex
     inx
     lda SERIAL_BUFFER,x   ; load low nibble
@@ -199,24 +196,24 @@ execute_stmt:
     jsr from_hex
     sta (start_adr)       ; write the byte to memory
     inc start_adr         ; increment the starting address
-    bne +
+    bne :+
     inc start_adr + 1     ; increment the high byte when necessary
-+   inx
+:   inx
     lda SERIAL_BUFFER,x   ; load high nibble
-    bne .write_byte
+    bne write_byte
     jmp print_prompt
-.go_to:
-    cmp #"g"
-    bne .go_sub
-    jsr .parse_args_g
+go_to:
+    cmp #'g'
+    bne go_sub
+    jsr parse_args_g
     jmp goto
-.go_sub:
-    cmp #"j"
-    bne .load_xmodem
-    jsr .parse_args_g
+go_sub:
+    cmp #'j'
+    bne load_xmodem
+    jsr parse_args_g
     ldx sp_reg              ; restore the stack pointer
     txs
-    jsr .gt_2                ; same as goto command, but return here
+    jsr gt_2                ; same as goto command, but return here
     sty y_reg               ; save the y register
     stx x_reg               ; save the x register
     sta a_reg               ; save the a register
@@ -225,13 +222,13 @@ execute_stmt:
     sta s_reg               ; save the status register
     jsr print_registers
     jmp print_prompt
-.load_xmodem:
-    cmp #"l"
-    bne .print_buf
-    jsr .parse_args_l
+load_xmodem:
+    cmp #'l'
+    bne print_buf
+    jsr parse_args_l
     jsr xmodem
     jmp print_prompt
-.print_buf:
+print_buf:
     lda #<SERIAL_BUFFER
     sta str_vec
     lda #>SERIAL_BUFFER
@@ -243,13 +240,13 @@ execute_stmt:
     lda #$0A              ; '/n'
     jsr put_chr
 
-.parse_args_m:
+parse_args_m:
     ; parse arguments
     inx
     lda SERIAL_BUFFER,x
-    cmp #" "
+    cmp #' '
     sec
-    bne .pam_end
+    bne pam_end
     inx
     lda SERIAL_BUFFER,x
     sta hi_hex
@@ -269,10 +266,10 @@ execute_stmt:
     inx
     lda SERIAL_BUFFER,x
     sec
-    beq .pam_end
-    cmp #" "
+    beq pam_end
+    cmp #' '
     sec
-    bne .pam_end
+    bne pam_end
     inx
     lda SERIAL_BUFFER,x
     sta hi_hex
@@ -282,16 +279,16 @@ execute_stmt:
     jsr from_hex
     sta length
     clc
-.pam_end:
+pam_end:
    rts
 
-.parse_args_w:
+parse_args_w:
     ; parse arguments
     inx
     lda SERIAL_BUFFER,x
-    cmp #" "              ; chomp " "
+    cmp #' '              ; chomp " "
     sec
-    bne .paw_end
+    bne paw_end
     inx
     lda SERIAL_BUFFER,x   ; load high nibble
     sta hi_hex
@@ -310,20 +307,20 @@ execute_stmt:
     sta start_adr         ; store low byte of start address
     inx
     lda SERIAL_BUFFER,x
-    cmp #" "
+    cmp #' '
     sec
-    bne .paw_end
+    bne paw_end
     clc
-.paw_end:
+paw_end:
     rts
 
-.parse_args_g:
+parse_args_g:
     ; parse arguments
     inx
     lda SERIAL_BUFFER,x
-    cmp #" "              ; chomp " "
+    cmp #' '              ; chomp " "
     sec
-    bne .pag_end
+    bne pag_end
     inx
     lda SERIAL_BUFFER,x   ; load high nibble
     sta hi_hex
@@ -341,15 +338,15 @@ execute_stmt:
     jsr from_hex
     sta start_adr         ; store low byte of start address
     clc
-.pag_end:
+pag_end:
     rts
 
-.parse_args_l:
+parse_args_l:
     inx
     lda SERIAL_BUFFER,x
-    cmp #" "                ; chomp " "
+    cmp #' '                ; chomp " "
     sec
-    bne .pal_end
+    bne pal_end
     inx
     lda SERIAL_BUFFER,x     ; load high nibble
     sta hi_hex
@@ -367,7 +364,7 @@ execute_stmt:
     jsr from_hex
     sta load_ptr                 ; store low byte of load address
     clc
-.pal_end:
+pal_end:
     rts
 
 ; debug:
@@ -391,16 +388,16 @@ print_registers:
     jsr put_hex
 
     ldy #$01
--   lda pc_reg_hi,y     ; starting with low-bit of PC
+:   lda pc_reg_hi,y     ; starting with low-bit of PC
     jsr put_hex         ; loop through the rest of the registers
-    lda #" "            ; print 1-byte value followed by a space
+    lda #' '            ; print 1-byte value followed by a space
     jsr put_chr
     iny
     cpy #$07            ; there are 5 registers to print
-    bcc -
-    lda #"\r"
+    bcc :-
+    lda #CR
     jsr put_chr
-    lda #"\n"
+    lda #LF
     jsr put_chr
     rts
 
@@ -417,9 +414,9 @@ put_hex:
     rts
 
 print_ascii:
-    lda #":"
+    lda #':'
     jsr put_chr
-    lda #" "
+    lda #' '
     jsr put_chr
 
     stz STRING_BUFFER,x
@@ -435,7 +432,7 @@ print_ascii:
 goto:
     ldx sp_reg              ; restore the stack pointer
     txs
-.gt_2:
+gt_2:
     lda start_adr+1         ; push the high-byte of the goto address to the
     pha                     ; stack. (RTI will think this is the value of PC)
     lda start_adr
@@ -456,22 +453,22 @@ print_memory:
 
     ; add the current index to the start address
     ; this is used for printing the start address of each line
-.prt_line:
+prt_line:
     tya
     and #$F8
     sta a_reg
     cpy a_reg
-    bne .prt_byte
+    bne prt_byte
 
     lda STRING_BUFFER
-    beq .start_ln
+    beq start_ln
     jsr print_ascii
 
-.start_ln
+start_ln:
     ldx #$00
-    lda #"\r"
+    lda #CR
     jsr put_chr
-    lda #"\n"
+    lda #LF
     jsr put_chr
     clc
     tya
@@ -497,12 +494,12 @@ print_memory:
     jsr put_chr
     lda lo_hex
     jsr put_chr
-    lda #":"
+    lda #':'
     jsr put_chr
-    lda #" "
+    lda #' '
     jsr put_chr
 
-.prt_byte:
+prt_byte:
     lda (start_adr),y
     sta hi_hex
     sta lo_hex
@@ -518,24 +515,24 @@ print_memory:
     iny
     inx
     cpy length
-    bne .prt_line
+    bne prt_line
 
-.pad:
+pad:
     cpx #$08
-    beq +
-    lda #" "
+    beq :+
+    lda #' '
     jsr put_chr
     jsr put_chr
     jsr put_chr
     inx
-    jmp .pad
+    jmp pad
 
-+   jsr print_ascii
+:   jsr print_ascii
     stz STRING_BUFFER
 
-    lda #"\r"
+    lda #CR
     jsr put_chr
-    lda #"\n"
+    lda #LF
     jsr put_chr
     pla
     ply
@@ -583,21 +580,21 @@ from_hex_digit:
     and #$DF      ; clear bit 5. Will make an lowercase letter uppercase
     sec
     sbc #$41      ; 'A'
-    bcs .af       ; if >= 0 goto .af
+    bcs af       ; if >= 0 goto .af
     sec           ; else try '0'-'9'
     lda a_reg
     sbc #$30      ; '0'
-    bcc .err      ; if < 0 goto err
+    bcc err      ; if < 0 goto err
     clc
-    jmp .end
-.af:
+    jmp end
+af:
     clc
     adc #$0A
     cmp #$10      ; if <= $10 we have a valid byte
-    bcc .end      ; else not A-F
-.err:
+    bcc end      ; else not A-F
+err:
     sec           ; set the carry flag to indicate an error
-.end:
+end:
     rts
 
 ; If the value in A is a printable ASCII character, do nothing. Otherwise
@@ -605,29 +602,14 @@ from_hex_digit:
 clean_byte:
     sec
     cmp #$20      ; first non-control character
-    bcs .not_ctrl
-    lda #"."
-.not_ctrl:  sec
+    bcs not_ctrl
+    lda #'.'
+not_ctrl:  sec
     cmp #$7F
-    bne .return
-    lda #"."
-.return
+    bne return
+    lda #'.'
+return:
     rts
-
-welcome:
-    !raw "I'm a computer!\r\n\0"
-
-hex_lookup:
-    !raw "0123456789ABCDEF"
-
-print_reg_msg:
-    !raw "   pc  sr ac xr yr sp\r\n\0"
-
-hello_msg:
-    !raw "Hello There!\r\n\0"
-
-; debug_text:
-;     !raw "\r\ndebug\r\n\0"
 
 say_hello:
     lda #<hello_msg
@@ -723,23 +705,23 @@ timer_init:
 irq:
     bit T1CL        ; reading clears the interrupt
     inc ticks
-    bne +
+    bne :+
     inc ticks + 1
-    bne +
+    bne :+
     inc ticks + 2
-    bne +
+    bne :+
     inc ticks + 3
-+   ply             ; restore registers
+:   ply             ; restore registers
     plx
     pla
     rti
 
 break:
     ldx #$05        ; pull registers off the stack
--   pla             ; order y_reg, x_reg, a_reg, s_reg, pc_reg
+:   pla             ; order y_reg, x_reg, a_reg, s_reg, pc_reg
     sta pc_reg_hi,x
     dex
-    bpl -
+    bpl :-
     cld             ; disable BCD mode (just in case)
     tsx             ; store sp_reg in memory
     stx sp_reg
@@ -759,10 +741,29 @@ irq_brk:
     tsx
     lda $104,x      ; load status register
     and #$10        ; is the break flag set?
-    beq +
+    beq :+
     jmp break
-+   jmp irq
+:   jmp irq
 
-    * = $FFFC
-    !word reset
-    !word irq_brk
+    .segment "RODATA"
+    .feature string_escapes
+
+welcome:
+    .asciiz "I'm a computer!\r\n"
+
+hex_lookup:
+    .byte "0123456789ABCDEF"
+
+print_reg_msg:
+    .asciiz "   pc  sr ac xr yr sp\r\n"
+
+hello_msg:
+    .asciiz "Hello There!\r\n"
+
+; debug_text:
+;     !raw "\r\ndebug\r\n\0"
+
+    .segment "VECTORS"
+    .res 2
+    .word reset
+    .word irq_brk

@@ -1,13 +1,17 @@
+    .segment "CODE"
+
 ; --- ACIA Registers ---
-    !addr ACIA_DATA     = $4400
-    !addr ACIA_STATUS   = $4401
-    !addr ACIA_COMMAND  = $4402
-    !addr ACIA_CONTROL  = $4403
+    ACIA_DATA     = $4400
+    ACIA_STATUS   = $4401
+    ACIA_COMMAND  = $4402
+    ACIA_CONTROL  = $4403
 
 ; --- Zero Page ---
-    !addr ticks     = $00  ; 4 bytes ($00 - $03)
-    !addr wait      = $04
-    !addr sbuf_eof  = $26
+    ticks     = $00  ; 4 bytes ($00 - $03)
+    wait      = $04
+    sbuf_eof  = $26
+
+    .export uart_init, put_chr, poll_chr
 
 uart_init:
     lda #%00011110  ; 1 stop bit; WL=8; baud; 9600
@@ -26,17 +30,17 @@ poll_chr:
     clc             ; carry flag will be clear if not char ready
     lda ACIA_STATUS
     and #%00001000  ; is receiver data register full?
-    beq +           ; if not, rts (don't wait)
+    beq :+          ; if not, rts (don't wait)
     lda ACIA_DATA
     sec             ; set the carry flag if we got a character
-+   rts
+:   rts
 
 wait_tick:
     pha
     lda ticks
     sta wait
--   lda ticks
+:   lda ticks
     cmp wait
-    beq -
+    beq :-
     pla
     rts
