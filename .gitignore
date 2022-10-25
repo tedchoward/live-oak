@@ -46,4 +46,7 @@ Temporary Items
 ## CA65 ##
 
 *.o
+*.map
 kernel
+basic
+!basic/
