@@ -109,18 +109,23 @@ bad_check:
     bra start_blk  ; start over, get the block again
 
 good_check:
+.scope
     ldx #$02
-    ldy #$00
-:   lda rbuff,x     ; get data byte from buffer
-    sta (ptr),y     ; save to target
-    iny
+store_byte:
+    lda rbuff,x     ; get data byte from buffer
+    sta (ptr)       ; save to target
+    inc ptr
+    bne skip_hi
+    inc ptr + 1
+skip_hi:
     inx             ; point to next data byte
     cpx #$82        ; is it the last byte?
-    bne :-          ; no, get the next one
+    bne store_byte  ; no, get the next one
     inc blkno       ; done. Inc the block #
     lda #ACK
     jsr put_chr     ; send ACK
     jmp start_blk  ; get next block
+.endscope
 
 done:
     lda #ACK
