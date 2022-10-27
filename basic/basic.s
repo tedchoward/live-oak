@@ -1,9 +1,12 @@
+; vim: set syntax=asm_ca65:
+
 CHAR_BS = $08
+CHAR_LF = $0a
 CHAR_CR = $0d
 CHAR_SPACE = $20
 CHAR_ZERO = $30
 CHAR_GT = $3e
-INPUT_BUFFER = $0200
+;INPUT_BUFFER = $0200
 
 .import poll_chr, put_chr
 
@@ -13,6 +16,10 @@ ptr: .word 0
 
 .segment "DATA"
 
+INPUT_BUFFER:
+    .repeat(256)
+        .BYTE 0
+    .endrepeat
 REG16_A: .word 0
 REG16_B: .word 0
 
@@ -37,14 +44,16 @@ REG16_B: .word 0
 .macro is_digit lbl
 .scope
     lda (ptr)
-    sec
-    sbc #CHAR_ZERO
-    cmp #$0a        ; if the value in A is > 10, this is not a digit
-    bcs lbl         ; acc > 10
+    cmp #CHAR_ZERO  ; if the value is < '0', this is not a digit
+    bcc lbl
+    cmp #$3a        ; if the value is >= ':' (val > '9'), this is not a digit
+    bcs lbl
+    and #$0f        ; we have a valid digit, drop the hi nibble to get the value
 .endscope
 .endmacro
 
 ; multiplies the 16-bit number at value by 10, storing the result in value
+; val * 10 == (val * 8) + (val * 2)
 .macro mul16_x10
 .scope
     pha
@@ -53,16 +62,17 @@ REG16_B: .word 0
     lda REG16_A + 1
     sta REG16_B + 1
 
+    ; multiply value by 8
     .repeat(3)
-    clc
     asl REG16_A
-    asl REG16_A + 1
+    rol REG16_A + 1
     .endrepeat
 
-    clc
+    ; multiply original value by 2
     asl REG16_B
-    asl scan_number + 1
+    rol REG16_B + 1
 
+    ; add the two 16-bit values
     clc
     lda REG16_B
     adc REG16_A
@@ -95,6 +105,13 @@ skip:
 .endscope
 .endmacro
 
+.macro newline
+    lda #CHAR_CR
+    jsr put_chr
+    lda #CHAR_LF
+    jsr put_chr
+.endmacro
+
 .proc start_cli
     set_ptr ptr, INPUT_BUFFER    ; initialize ptr to start of buffer
 
@@ -108,10 +125,14 @@ wait_for_chr:
     jsr poll_chr
     bcc wait_for_chr
     is_chr CHAR_CR, backspace
+    sta (ptr)
+    jsr put_chr
+    lda #CHAR_LF
     jsr put_chr
 
     set_ptr ptr, INPUT_BUFFER    ; initialize ptr to start of buffer
     jsr scan_number
+    rts
     bra start_cli
 backspace:
     is_chr CHAR_BS, buffer_ch
@@ -133,10 +154,12 @@ echo:
     stz REG16_A + 1
 
     is_digit end
+    jsr put_chr
     sta REG16_A
-    inc16 ptr
 next_digit:
+    inc16 ptr
     is_digit end
+    jsr put_chr
     mul16_x10       ; multiply REG16_A by 10
     clc
     adc REG16_A       ; add A to REG16_A
