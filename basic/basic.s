@@ -4,8 +4,10 @@ CHAR_BS = $08
 CHAR_LF = $0a
 CHAR_CR = $0d
 CHAR_SPACE = $20
+CHAR_PLUS = $2b
 CHAR_ZERO = $30
 CHAR_GT = $3e
+CHAR_T = $54
 ;INPUT_BUFFER = $0200
 
 .import poll_chr, put_chr
@@ -13,12 +15,17 @@ CHAR_GT = $3e
 .segment "ZEROPAGE"
 
 ptr: .word 0
+output_ptr: .word 0
 
 .segment "DATA"
 
 INPUT_BUFFER:
     .repeat(256)
-        .BYTE 0
+        .byte 0
+    .endrepeat
+OUTPUT_STACK:
+    .repeat(256)
+        .byte 0
     .endrepeat
 REG16_A: .word 0
 REG16_B: .word 0
@@ -112,8 +119,27 @@ skip:
     jsr put_chr
 .endmacro
 
+.macro outstk_push addr
+    lda addr + 1
+    sta (output_ptr)
+    inc16 output_ptr
+    lda addr
+    sta (output_ptr)
+    inc16 output_ptr
+.endmacro
+
+.macro outstk_pull addr
+    dec16 output_ptr
+    lda (output_ptr)
+    sta addr
+    dec16 output_ptr
+    lda(output_ptr)
+    sta addr + 1
+.endmacro
+
 .proc start_cli
-    set_ptr ptr, INPUT_BUFFER    ; initialize ptr to start of buffer
+    set_ptr ptr, INPUT_BUFFER           ; initialize ptr to start of buffer
+    set_ptr output_ptr, OUTPUT_STACK    ; initialize output_ptr
 
     ; print prompt
     lda #CHAR_GT
@@ -131,7 +157,7 @@ wait_for_chr:
     jsr put_chr
 
     set_ptr ptr, INPUT_BUFFER    ; initialize ptr to start of buffer
-    jsr scan_number
+    jsr evaluate
     rts
     bra start_cli
 backspace:
@@ -144,6 +170,29 @@ buffer_ch:
 echo:
     jsr put_chr
     bra wait_for_chr
+.endproc
+
+.proc evaluate
+    jsr consume_whitespace
+    is_digit error
+    jsr scan_number
+    jsr consume_whitespace
+    is_chr CHAR_PLUS, error
+    inc16 ptr               ; consume token
+    jsr consume_whitespace
+    is_digit error
+    jsr scan_number
+    jsr add16
+    ; print result
+    bra end
+error:
+    ldx $00
+next_char:
+    lda str_syntax_error,x
+    jsr put_chr
+    bne next_char
+end:
+    rts
 .endproc
 
 ; reads numeric characters starting at ptr and converts the value into a
@@ -169,8 +218,35 @@ next_digit:
 skip_hi:
     bra next_digit
 end:
-    ; TODO push 16-bit number at REG16_A to the proper stack
+    ; push 16-bit number at REG16_A to the proper stack
+    outstk_push REG16_A
+    rts
+.endproc
+
+.proc consume_whitespace
+    lda (ptr)
+    is_chr CHAR_SPACE, end
+    inc16 ptr
+    bra consume_whitespace
+end:
+    rts
+.endproc
+
+.proc add16
+    outstk_pull REG16_A
+    outstk_pull REG16_B
+    clc
+    lda REG16_A
+    adc REG16_B
+    sta REG16_A
+    lda REG16_A + 1
+    adc REG16_B + 1
+    sta REG16_A + 1
+    outstk_push REG16_A
     rts
 .endproc
 
 .segment "RODATA"
+
+str_syntax_error:
+    .byte "Syntax Error", CHAR_CR, CHAR_LF, $00
