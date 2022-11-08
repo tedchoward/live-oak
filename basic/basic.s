@@ -49,14 +49,12 @@ REG16_B: .word 0
 ; if the character at ptr is a digit (0-9), store the numeric value in A
 ; othwerise jump to lbl
 .macro is_digit lbl
-.scope
     lda (ptr)
     cmp #CHAR_ZERO  ; if the value is < '0', this is not a digit
     bcc lbl
     cmp #$3a        ; if the value is >= ':' (val > '9'), this is not a digit
     bcs lbl
     and #$0f        ; we have a valid digit, drop the hi nibble to get the value
-.endscope
 .endmacro
 
 ; multiplies the 16-bit number at value by 10, storing the result in value
@@ -186,10 +184,12 @@ echo:
     ; print result
     bra end
 error:
-    ldx $00
+    ldx #$00
 next_char:
     lda str_syntax_error,x
+    beq end
     jsr put_chr
+    inx
     bne next_char
 end:
     rts
@@ -203,12 +203,10 @@ end:
     stz REG16_A + 1
 
     is_digit end
-    jsr put_chr
     sta REG16_A
 next_digit:
     inc16 ptr
     is_digit end
-    jsr put_chr
     mul16_x10       ; multiply REG16_A by 10
     clc
     adc REG16_A       ; add A to REG16_A
@@ -247,6 +245,8 @@ end:
 .endproc
 
 .segment "RODATA"
+    .feature string_escapes
 
 str_syntax_error:
-    .byte "Syntax Error", CHAR_CR, CHAR_LF, $00
+    .asciiz "Syntax Error\r\n"
+
