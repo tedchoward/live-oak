@@ -1,3 +1,5 @@
+; vim: set syntax=asm_ca65:
+
 ; --- UART Hello ---
 
     .segment "CODE"
@@ -14,9 +16,14 @@
     IER   = $600E
 
 ; --- LCD Control Bits ---
+    ; PORTA
     E  = %10000000
-    RW = %01000000
-    RS = %00100000
+    ; PORTB
+    RW = %00001000
+    RS = %00000100
+
+
+    PORTA_OFF = %00000000
 
 ; --- Zero Page ---
     ticks     = $00  ; 4 bytes ($00 - $03)
@@ -620,62 +627,110 @@ say_hello:
     rts
 
 lcd_init:
-    lda #%11111111  ; Set all pins on port B to output
+    lda #%11111111  ; Set ALL pins on port B to output
     sta DDRB
-    lda #%11100000  ; Set top 3 pins on port A to output
+    lda #%10000000  ; Set top pin on port A to output
     sta DDRA
 
-    lda #%00111000  ; Set 8bit mode; 2-line display; 5x8 font
+    lda #PORTA_OFF
+    sta PORTA
+
+   ;lda #%00111000  ; Set 8bit mode; 2-line display; 5x8 font
+    lda #%00101000  ; Set 4bit mode; 2-line display; 5x8 font
     jsr lcd_inst
 
-    lda  #%00001110 ; Disply on, Cursor on; blink off
+    lda #%00001110  ; Disply on, Cursor on; blink off
     jsr lcd_inst
 
-    lda #%00000110  ; Increent and shift cursor; don't shift display
+    lda #%00000110  ; Increment and shift cursor; don't shift display
     jsr lcd_inst
 
     jsr lcd_clear
 
+    rts
+
 lcd_wait:
     pha
-    lda #%00000000  ; port B is input
+    lda #%00001111  ; port B (high) is input
     sta DDRB
 lcd_busy:
     lda #RW
-    sta PORTA
-    lda #(RW | E)
+    sta PORTB
+    lda #E
     sta PORTA
     lda PORTB
+    pha
+    lda #PORTA_OFF
+    sta PORTA
+
+    lda #RW
+    sta PORTB
+    lda #E
+    sta PORTA
+    lda PORTB
+    lda #PORTA_OFF
+    sta PORTA
+
+    pla
     and #%10000000
     bne lcd_busy
 
-    lda #RW
-    sta PORTA
-    lda #%11111111  ; port B is output
+    lda #%11111111  ; port B (high) is output
     sta DDRB
     pla
     rts
 
 lcd_inst:
     jsr lcd_wait
+    pha
+    and #$F0
     sta PORTB
-    lda #0          ; Clear Rs/RW/E bits
+    ; lda #PORTA_OFF          ; Clear Rs/RW/E bits
+    ; sta PORTA
+    lda #E                  ; Set E bit to send instruction
     sta PORTA
-    lda #E          ; Set E bit to send instruction
+    lda #PORTA_OFF          ; Clear Rs/RW/E bits
     sta PORTA
-    lda #0          ; Clear Rs/RW/E bits
+    pla
+    asl
+    asl
+    asl
+    asl
+    sta PORTB
+    ; lda #0                ; Clear Rs/RW/E bits
+    ; sta PORTA
+    lda #E                  ; Set E bit to send instruction
+    sta PORTA
+    lda #PORTA_OFF          ; Clear Rs/RW/E bits
     sta PORTA
     rts
 
 print_ch:
     pha
     jsr lcd_wait
+    pha
+    and #$F0
+    ora #RS           ; Set RS; Clear RW/E bits
     sta PORTB
-    lda #RS         ; Set RS; Clear RW/E bits
+    ; lda #RS         ; Set RS; Clear RW/E bits
+    ; sta PORTA
+    lda #E   ; Set E bit to send instruction
     sta PORTA
-    lda #(RS | E)   ; Set E bit to send instruction
+    lda #PORTA_OFF         ; Clear E bit
     sta PORTA
-    lda #RS         ; Clear E bit
+    pla
+
+    asl
+    asl
+    asl
+    asl
+    ora #RS
+    sta PORTB
+    ; lda #RS         ; Set RS; Clear RW/E bits
+    ; sta PORTA
+    lda #E   ; Set E bit to send instruction
+    sta PORTA
+    lda #PORTA_OFF         ; Clear E bit
     sta PORTA
     pla
     rts
