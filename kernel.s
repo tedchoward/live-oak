@@ -17,13 +17,14 @@
 
 ; --- LCD Control Bits ---
     ; PORTA
-    E  = %10000000
+    LCD_E  = %11000000  ; LCD is active high
+    SND_E  = %00000000  ; SND is active low
     ; PORTB
     RW = %00001000
     RS = %00000100
 
 
-    PORTA_OFF = %00000000
+    PORTA_OFF = %01000000
 
 ; --- Zero Page ---
     ticks     = $00  ; 4 bytes ($00 - $03)
@@ -54,7 +55,7 @@
     LF = $0a
 
 
-    .import xmodem, poll_chr, put_chr, uart_init
+    .import xmodem, poll_chr, put_chr, uart_init, wait_tick
 
 reset:
     ldx #$FF            ; initialize the stack pointer
@@ -65,7 +66,9 @@ reset:
 
     jsr uart_init
     jsr timer_init
-    jsr lcd_init
+    jsr via_init
+    jsr snd_init
+    ; jsr lcd_init
 
     ; set some values into memory for testing
     lda #$01
@@ -109,17 +112,17 @@ print_prompt:
 loop:
     jsr poll_chr  ; read character from uart
     bcc loop      ; if a character was read,
-    pha
-    sta hi_hex
-    sta lo_hex
-    jsr convert_to_hex
-    lda hi_hex
-    jsr print_ch  ; print the character to LCD
-    lda lo_hex
-    jsr print_ch  ; print the character to LCD
-    lda #$20      ; ' ' character
-    jsr print_ch  ; print the character to LCD
-    pla
+    ; pha
+    ; sta hi_hex
+    ; sta lo_hex
+    ; jsr convert_to_hex
+    ; lda hi_hex
+    ; jsr print_ch  ; print the character to LCD
+    ; lda lo_hex
+    ; jsr print_ch  ; print the character to LCD
+    ; lda #$20      ; ' ' character
+    ; jsr print_ch  ; print the character to LCD
+    ; pla
     cmp #$03      ; it it CTRL-C ?
     bne case_cr
     brk
@@ -626,14 +629,46 @@ say_hello:
     jsr print_str
     rts
 
-lcd_init:
+via_init:
     lda #%11111111  ; Set ALL pins on port B to output
     sta DDRB
-    lda #%10000000  ; Set top pin on port A to output
+    lda #%11000000  ; Set top pin on port A to output
     sta DDRA
 
     lda #PORTA_OFF
     sta PORTA
+    rts
+
+snd_init:
+    ; silence all channels
+    lda #$9F
+    jsr snd_instr
+    lda #$BF
+    jsr snd_instr
+    lda #$DF
+    jsr snd_instr
+    lda #$FF
+    jsr snd_instr
+    rts
+
+
+snd_instr:
+    sta PORTB
+    lda #SND_E
+    sta PORTA
+    jsr wait_tick
+    lda #PORTA_OFF
+    sta PORTA
+    rts
+
+lcd_init:
+    ; lda #%11111111  ; Set ALL pins on port B to output
+    ; sta DDRB
+    ; lda #%10000000  ; Set top pin on port A to output
+    ; sta DDRA
+
+    ; lda #PORTA_OFF
+    ; sta PORTA
 
    ;lda #%00111000  ; Set 8bit mode; 2-line display; 5x8 font
     lda #%00101000  ; Set 4bit mode; 2-line display; 5x8 font
@@ -656,7 +691,7 @@ lcd_wait:
 lcd_busy:
     lda #RW
     sta PORTB
-    lda #E
+    lda #LCD_E
     sta PORTA
     lda PORTB
     pha
@@ -665,7 +700,7 @@ lcd_busy:
 
     lda #RW
     sta PORTB
-    lda #E
+    lda #LCD_E
     sta PORTA
     lda PORTB
     lda #PORTA_OFF
@@ -687,7 +722,7 @@ lcd_inst:
     sta PORTB
     ; lda #PORTA_OFF          ; Clear Rs/RW/E bits
     ; sta PORTA
-    lda #E                  ; Set E bit to send instruction
+    lda #LCD_E                  ; Set E bit to send instruction
     sta PORTA
     lda #PORTA_OFF          ; Clear Rs/RW/E bits
     sta PORTA
@@ -699,7 +734,7 @@ lcd_inst:
     sta PORTB
     ; lda #0                ; Clear Rs/RW/E bits
     ; sta PORTA
-    lda #E                  ; Set E bit to send instruction
+    lda #LCD_E                  ; Set E bit to send instruction
     sta PORTA
     lda #PORTA_OFF          ; Clear Rs/RW/E bits
     sta PORTA
@@ -714,7 +749,7 @@ print_ch:
     sta PORTB
     ; lda #RS         ; Set RS; Clear RW/E bits
     ; sta PORTA
-    lda #E   ; Set E bit to send instruction
+    lda #LCD_E   ; Set E bit to send instruction
     sta PORTA
     lda #PORTA_OFF         ; Clear E bit
     sta PORTA
@@ -728,7 +763,7 @@ print_ch:
     sta PORTB
     ; lda #RS         ; Set RS; Clear RW/E bits
     ; sta PORTA
-    lda #E   ; Set E bit to send instruction
+    lda #LCD_E   ; Set E bit to send instruction
     sta PORTA
     lda #PORTA_OFF         ; Clear E bit
     sta PORTA

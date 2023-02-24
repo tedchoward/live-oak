@@ -11,7 +11,7 @@
     wait      = $04
     sbuf_eof  = $26
 
-    .export uart_init, put_chr, poll_chr
+    .export uart_init, put_chr, poll_chr, wait_tick
 
 uart_init:
     lda #%00011110  ; 1 stop bit; WL=8; baud; 9600
