@@ -23,7 +23,7 @@ uart_init:
 
 put_chr:
     sta ACIA_DATA
-    jsr wait_tick
+    jsr wait_loop
     rts
 
 poll_chr:
@@ -44,3 +44,13 @@ wait_tick:
     beq :-
     pla
     rts
+
+; designed to wait the time it takes to send 10 bits at 9600 baud
+; overhead = 21 cycles, loop = 204 * 5 = 1020 cycles
+wait_loop:
+  phx
+  ldx #204
+: dex
+  bne :-
+  plx
+  rts
