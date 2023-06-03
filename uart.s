@@ -9,7 +9,6 @@
 ; --- Zero Page ---
     ticks     = $00  ; 4 bytes ($00 - $03)
     wait      = $04
-    sbuf_eof  = $26
 
     .export uart_init, put_chr, poll_chr, wait_tick
 
@@ -18,7 +17,6 @@ uart_init:
     sta ACIA_CONTROL
     lda #%00001011  ; no parity; echo off; interrupt off; DTR active low
     sta ACIA_COMMAND
-    stz sbuf_eof
     rts
 
 put_chr:

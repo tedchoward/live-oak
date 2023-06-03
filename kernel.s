@@ -57,12 +57,15 @@
 
     .import xmodem, poll_chr, put_chr, uart_init, wait_tick
 
+    .export snd_instr
+
 reset:
     ldx #$FF            ; initialize the stack pointer
     txs
 
     stz SERIAL_BUFFER   ; initialize serial buffer
     stz STRING_BUFFER   ; initialize string buffer
+    stz sbuf_eof
 
     jsr uart_init
     jsr timer_init
