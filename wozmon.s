@@ -1,0 +1,226 @@
+	.import poll_chr, put_chr, uart_init
+	.segment "CODE"
+
+; --- Variables ---
+	XAML = $24	; Last opened location low
+	XAMH = $25	; Last opened location high
+	STL  = $26	; Store address low
+	STH  = $27	; Store address high
+	L    = $28	; Hex value parsing low
+	H    = $29	; Hex value parsing high
+	YSAV = $2a	; Used to see if hex value is given
+	MODE = $2b	; $00=XAM, $7F=STOR, $AE=BLOCK XAM
+
+	IN   = $200	; Input buffer
+
+; --- Constants ---
+	BS     = $08 + $80	; backspace key
+	CR     = $0d + $80	; carriage return
+	LF     = $0a + $80	; carriage return
+	ESC    = $1b + $80	; ESC key
+	PROMPT = $5c + $80	; Prompt character ("\")
+
+reset:
+	cld
+	cli
+	jsr	uart_init
+	ldy	#$7f		; cause an auto ESC
+
+; --- GETLINE process ---
+notcr:
+	cmp	#BS
+	beq	backspace
+	cmp	#ESC
+	beq	escape
+	iny			; advance text index
+	bpl	nextchar	; auto ESC if line longer than 127
+
+escape:
+	lda	#PROMPT
+	jsr	echo
+
+getline:
+	lda	#CR
+	jsr	echo
+	lda	#LF
+	jsr	echo
+
+	ldy	#$01
+backspace:
+	dey
+	bmi	getline		; oops, line is empty, re-init
+
+nextchar:
+	jsr	poll_chr
+	bcc	nextchar
+	ora	#$80		; the apple 1 had bit-7 hard-wired to +5v
+	sta	IN,y
+	jsr	echo
+	cmp	#CR
+	bne	notcr
+	lda	#LF		; a CR needs a corresponding LF
+	jsr	echo
+
+; Line received, time to parse
+
+	ldy	#$ff		; reset text idex
+	lda	#$00		; default mode is XAM
+	tax			; X=0
+
+setstor:
+	asl			; leaves $7b if setting STOR mode
+
+setmode:
+	sta	MODE		; set MODE flags
+
+blskip:
+	iny			; advance text index
+
+nextitem:
+	lda	IN,y		; get character
+	cmp	#CR
+	beq	getline		; we're done if it's a CR
+	cmp	#'.'+$80
+	bcc	blskip		; ignore everything below "."!
+	beq	setmode		; set BLOCK XAM mode ("." = $AE)
+	cmp	#':'+$80
+	beq	setstor		; set STOR mode! $ba will become $7b
+	cmp	#'R'+$80
+	beq	run		; run the program, forget the rest
+	stx	L		; clear input value (X=0)
+	stx	H
+	sty	YSAV		; save Y for comparison
+
+; time to parse a hex value
+nexthex:
+	lda	IN,y		; get character for hex test
+	eor	#$b0		; map digits 0-9
+	cmp	#9+1		; is it a decimal digit
+	bcc	dig
+	adc	#$88		; map letter "A"-"F" to $fa-$ff
+	cmp	#$fa		; hex letter?
+	bcc	nothex
+
+dig:
+	asl
+	asl			; hex digit to msd of a
+	asl
+	asl
+
+	ldx	#4		; shift count
+hexshift:
+	asl			; hex digit left, msb to carry
+	rol	L		; rotate into LSD
+	rol	H		; rotate into MSD's
+	dex
+	bne	hexshift
+	iny
+	bne	nexthex
+
+nothex:
+	cpy	YSAV		; was at least 1 hex digit found?
+	beq	escape		; no? ignore all, start over
+
+	bit	MODE		; test MODE byte
+	bvc	notstor		; B6=0 is STOR, 1 is XAM, or BLOCK XAM
+
+; STOR mode, save LSD of new hex byte
+
+	lda	L		; LSD's of hex data
+	sta	(STL,x)		; Store current 'store index'(X=0)
+	inc	STL		; increment store index
+	bne	nextitem
+	inc	STH		; if carry, add to STH
+tonextitem:
+	jmp	nextitem	; get next command item
+
+; --- RUN user's program for last opened location ---
+
+run:
+	jmp	(XAML)		; run user's program
+
+; --- Not in store mode ---
+
+notstor:
+	bmi	xamnext		; B7 = 0 for XAM, 1 for BLOCK XAM
+
+; --- XAM mode ---
+	ldx	#2		; Copy 2 bytes
+setadr:	lda	L-1,x		; copy hex data
+	sta	STL-1,x		;   to 'store index'
+	sta	XAML-1,x	;    and to 'XAM index'
+	dex			; next of 2 bytes
+	bne	setadr
+
+; Print address and data from this address, fall through next BNE
+
+nxtprnt:
+	bne	prdata		; NE means no address to print
+	lda	#CR		; print CR first
+	jsr	echo
+	lda	#LF		; print LF next
+	jsr	echo
+	lda	XAMH		; output high-order byte of address
+	jsr	prbyte
+	lda	XAML		; output low-order byte of address
+	jsr	prbyte
+	lda	#':'+$80
+	jsr	echo
+
+prdata:
+	lda	#' '+$80	; Print space
+	jsr	echo
+	lda	(XAML,x)	; get data from address (X=0)
+	jsr	prbyte
+xamnext:
+	stx	MODE		; 0 -> MODE (XAM mode)
+	lda	XAML		; see if there's more to print
+	cmp	L
+	lda	XAMH
+	sbc	H
+	bcs	tonextitem	; no more data to output
+
+	inc	XAML		; increment "examine index"
+	bne	mod8chk
+	inc	XAMH
+
+mod8chk:
+	lda	XAML		; if address MOD 8 = 0, start new line
+	and	#$07
+	bpl	nxtprnt		; always taken
+
+; --- Subroutine to print a byte in A in hex form (destructive) ---
+
+prbyte:
+	pha			; save A for LSD
+	lsr
+	lsr
+	lsr
+	lsr
+	jsr	prhex		; output hex digit
+	pla			; restore A
+
+; fall through to print hex routine
+
+prhex:
+	and	#$0f		; mask LSD for hex print
+	ora	#'0'+$80	; add "0"
+	cmp	#$ba		; is it 0-9?
+	bcc	echo
+	adc	#$06		; add offset for letter A-F
+
+; fall through to print routine
+
+echo:
+	pha
+	and	#$7f		; turn bit-1 off to get proper ASCII
+	jsr	put_chr
+	pla
+	rts
+
+; --- Vectors ---
+	.segment "VECTORS"
+
+	.word	$0F00		; NMI
+	.word	reset
+	.word	$0000		; IRQ

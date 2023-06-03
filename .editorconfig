@@ -14,3 +14,7 @@ indent_size = 4
 [Makefile]
 indent_size = 4
 indent_style = tab
+
+[{bios,wozmon}.s]
+indent_size = 8
+indent_style = tab
