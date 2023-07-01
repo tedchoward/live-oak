@@ -1,4 +1,4 @@
-	.import poll_chr, put_chr, uart_init
+	.import poll_chr, put_chr, uart_init, init_pinky, c_out
 	.segment "CODE"
 
 ; --- Variables ---
@@ -24,6 +24,7 @@ reset:
 	cld
 	cli
 	jsr	uart_init
+	jsr	init_pinky
 	ldy	#$7f		; cause an auto ESC
 
 ; --- GETLINE process ---
@@ -215,6 +216,7 @@ echo:
 	pha
 	and	#$7f		; turn bit-1 off to get proper ASCII
 	jsr	put_chr
+	jsr	c_out
 	pla
 	rts
 

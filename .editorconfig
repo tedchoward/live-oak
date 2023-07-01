@@ -15,6 +15,6 @@ indent_size = 4
 indent_size = 4
 indent_style = tab
 
-[{bios,wozmon}.s]
+[{bios,wozmon,pinky}.s]
 indent_size = 8
 indent_style = tab
