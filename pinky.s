@@ -98,7 +98,7 @@ printable_char:
 new_row:
 	stz	CURSOR_COL
 	lda	CURSOR_ROW
-	cmp	#30
+	cmp	#29			; row 29 is the bottom row
 	bcc	next_row
 	jsr	scroll
 	bra	end
