@@ -11,21 +11,21 @@
 	YSAV = $2a	; Used to see if hex value is given
 	MODE = $2b	; $00=XAM, $7F=STOR, $AE=BLOCK XAM
 
-	IN   = $200	; Input buffer
+	IN   = $0200	; Input buffer
 
 ; --- Constants ---
-	BS     = $08 + $80	; backspace key
-	CR     = $0d + $80	; carriage return
-	LF     = $0a + $80	; carriage return
-	ESC    = $1b + $80	; ESC key
-	PROMPT = $5c + $80	; Prompt character ("\")
+	BS     = $08	; backspace key
+	CR     = $0d	; carriage return
+	LF     = $0a	; carriage return
+	ESC    = $1b	; ESC key
+	PROMPT = $5c	; Prompt character ("\")
 
 reset:
 	cld
 	cli
 	jsr	uart_init
 	jsr	init_pinky
-	ldy	#$7f		; cause an auto ESC
+	lda	#ESC		; cause an auto ESC
 
 ; --- GETLINE process ---
 notcr:
@@ -43,8 +43,6 @@ escape:
 getline:
 	lda	#CR
 	jsr	echo
-	lda	#LF
-	jsr	echo
 
 	ldy	#$01
 backspace:
@@ -54,13 +52,10 @@ backspace:
 nextchar:
 	jsr	poll_chr
 	bcc	nextchar
-	ora	#$80		; the apple 1 had bit-7 hard-wired to +5v
 	sta	IN,y
 	jsr	echo
 	cmp	#CR
 	bne	notcr
-	lda	#LF		; a CR needs a corresponding LF
-	jsr	echo
 
 ; Line received, time to parse
 
@@ -68,11 +63,11 @@ nextchar:
 	lda	#$00		; default mode is XAM
 	tax			; X=0
 
+setblock:
+	asl
 setstor:
 	asl			; leaves $7b if setting STOR mode
-
-setmode:
-	sta	MODE		; set MODE flags
+	sta	MODE		; $00 = XAM, $74 = STOR, $B8 = BLOK XAM.
 
 blskip:
 	iny			; advance text index
@@ -81,12 +76,12 @@ nextitem:
 	lda	IN,y		; get character
 	cmp	#CR
 	beq	getline		; we're done if it's a CR
-	cmp	#'.'+$80
+	cmp	#'.'
 	bcc	blskip		; ignore everything below "."!
-	beq	setmode		; set BLOCK XAM mode ("." = $AE)
-	cmp	#':'+$80
+	beq	setblock		; set BLOCK XAM mode ("." = $AE)
+	cmp	#':'
 	beq	setstor		; set STOR mode! $ba will become $7b
-	cmp	#'R'+$80
+	cmp	#'R'
 	beq	run		; run the program, forget the rest
 	stx	L		; clear input value (X=0)
 	stx	H
@@ -95,8 +90,8 @@ nextitem:
 ; time to parse a hex value
 nexthex:
 	lda	IN,y		; get character for hex test
-	eor	#$b0		; map digits 0-9
-	cmp	#9+1		; is it a decimal digit
+	eor	#$30		; map digits 0-9
+	cmp	#$0a		; is it a decimal digit
 	bcc	dig
 	adc	#$88		; map letter "A"-"F" to $fa-$ff
 	cmp	#$fa		; hex letter?
@@ -108,7 +103,7 @@ dig:
 	asl
 	asl
 
-	ldx	#4		; shift count
+	ldx	#$04		; shift count
 hexshift:
 	asl			; hex digit left, msb to carry
 	rol	L		; rotate into LSD
@@ -159,17 +154,15 @@ nxtprnt:
 	bne	prdata		; NE means no address to print
 	lda	#CR		; print CR first
 	jsr	echo
-	lda	#LF		; print LF next
-	jsr	echo
 	lda	XAMH		; output high-order byte of address
 	jsr	prbyte
 	lda	XAML		; output low-order byte of address
 	jsr	prbyte
-	lda	#':'+$80
+	lda	#':'
 	jsr	echo
 
 prdata:
-	lda	#' '+$80	; Print space
+	lda	#' '	; Print space
 	jsr	echo
 	lda	(XAML,x)	; get data from address (X=0)
 	jsr	prbyte
@@ -205,8 +198,8 @@ prbyte:
 
 prhex:
 	and	#$0f		; mask LSD for hex print
-	ora	#'0'+$80	; add "0"
-	cmp	#$ba		; is it 0-9?
+	ora	#'0'		; add "0"
+	cmp	#$3a		; is it 0-9?
 	bcc	echo
 	adc	#$06		; add offset for letter A-F
 
@@ -214,7 +207,6 @@ prhex:
 
 echo:
 	pha
-	and	#$7f		; turn bit-1 off to get proper ASCII
 	jsr	put_chr
 	jsr	c_out
 	pla
