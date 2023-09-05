@@ -1,10 +1,10 @@
     .segment "CODE"
 
 ; --- ACIA Registers ---
-    ACIA_DATA     = $4400
-    ACIA_STATUS   = $4401
-    ACIA_COMMAND  = $4402
-    ACIA_CONTROL  = $4403
+    ACIA_DATA     = $C010
+    ACIA_STATUS   = $C011
+    ACIA_COMMAND  = $C012
+    ACIA_CONTROL  = $C013
 
 ; --- Zero Page ---
     ticks     = $00  ; 4 bytes ($00 - $03)
@@ -44,10 +44,10 @@ wait_tick:
     rts
 
 ; designed to wait the time it takes to send 10 bits at 19200 baud
-; overhead = 21 cycles, loop = 100 * 5 = 500 cycles
+; overhead = 21 cycles, loop = 160 * 5 = 800 cycles
 wait_loop:
   phx
-  ldx #100
+  ldx #160
 : dex
   bne :-
   plx

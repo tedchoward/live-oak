@@ -23,6 +23,8 @@
 reset:
 	cld
 	cli
+	lda	#$02
+	sta	$00		; select RAM bank 2 (0 and 1 mirror low memory)
 	jsr	uart_init
 	jsr	init_pinky
 	lda	#ESC		; cause an auto ESC
