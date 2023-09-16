@@ -1,3 +1,4 @@
+; vim: set syntax=asm_ca65:
 	.import poll_chr, put_chr, uart_init, init_pinky, c_out
 	.segment "CODE"
 
