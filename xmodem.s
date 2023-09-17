@@ -1,3 +1,4 @@
+; vim: set filetype=asm_ca65:
 ; XMODEM routines, inspired by: http://6502.org/source/io/xmodem/xmodem-receive.txt
 
     .import poll_chr, put_chr

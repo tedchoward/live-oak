@@ -1,4 +1,4 @@
-; vim: set syntax=asm_ca65:
+; vim: set filetype=asm_ca65:
     .segment "CODE"
 
 ; --- ACIA Registers ---
