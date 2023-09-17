@@ -1,10 +1,10 @@
-objects = uart.o xmodem.o kernel.o pinky.o
+objects = uart.o xmodem.o kernel.o pinky.o xm2.o
 
-kernel : $(objects)
-	ld65 -C liveoak.cfg -o kernel -m kernel.map -vm $(objects)
+#kernel : $(objects)
+	#ld65 -C liveoak.cfg -o kernel -m kernel.map -vm $(objects)
 
-wozmon : uart.o wozmon.o pinky.o
-	ld65 -C liveoak.cfg -o wozmon -m wozmon.map -vm uart.o wozmon.o pinky.o
+wozmon : uart.o wozmon.o pinky.o xm2.o
+	ld65 -C liveoak.cfg -o wozmon -m wozmon.map -vm uart.o wozmon.o pinky.o xm2.o
 
 %.o : %.s
 	ca65 --cpu 65c02 $<
@@ -15,4 +15,4 @@ flash:
 
 .PHONY : clean
 clean :
-	rm kernel wozmon $(objects)
+	-rm kernel wozmon $(objects)

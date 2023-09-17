@@ -1,6 +1,6 @@
 ; vim: set filetype=asm_ca65:
 
-	.import poll_chr, put_chr
+	.import put_chr
 	.segment "CODE"
 
 ; --- Zero Page ---
@@ -9,6 +9,7 @@
 	CHECKSUM		= $04
 	DATA_DESTINATION	= $05	; 2 bytes
 
+; --- Variables ---
 	READ_BUFFER	= $0300
 
 ; --- Constants ---
@@ -24,6 +25,9 @@
 	EOT		= $04
 	ACK		= $06
 	NAK		= $15
+	CAN		= $18
+
+	.export xmodem_receive
 
 xmodem_receive:
 	; determine where in memory to store received bytes
@@ -32,7 +36,7 @@ xmodem_receive:
 	sta	PACKET_NUM
 
 retry_packet:
-	lda	TIMEOUT_10
+	lda	#TIMEOUT_10
 	sta	XMODEM_POLL_TIMEOUT
 
 	; Start the process by sending a NAK
@@ -48,9 +52,10 @@ receive_packet:
 
 	cmp	#SOH		; start of a vaild packet
 	bne	send_nak	; TODO: only retry 10 times
+	sta	READ_BUFFER
 
 	; Once we are processing a valid packet, switch to 1 second timeout
-	lda	TIMEOUT_1
+	lda	#TIMEOUT_1
 	sta	XMODEM_POLL_TIMEOUT
 
 	; Now we'll read the entire packet into a buffer
@@ -66,10 +71,11 @@ receive_packet:
 	; Packet Structure (132 bytes total)
 	; [SOH] [packet_num] [EOR packetnum] [128 data bytes] [checksum]
 
-	ldx	#$00
+	ldx	#$01
 next_byte:
 	jsr	xmodem_poll
-	bcc	error
+	bcc	purge_and_retry	; if it times out, purge the line, send NAK
+				; and retry the packet
 	sta	READ_BUFFER, x
 	inx
 	cpx	#132
@@ -77,18 +83,26 @@ next_byte:
 
 	; At this point we have stored a complete packet in READ_BUFFER
 
-	; First, validate the packet number
-	lda	READ_BUFFER
-	cmp	PACKET_NUM	; is this the block we are expecting?
-	bne	error		; TODO better error handling
+	; First, validate the packet number and complement
+	lda	READ_BUFFER+1
+	eor	#$FF
+	cmp	READ_BUFFER+2
+	bne	retry_packet	; if the complement doesn't match, send a NAK
+				; and start over
 
-	; next, validate the complement
-	eor	$FF
-	cmp	READ_BUFFER+1
-	bne	error
+	; Next check for out-of-sequence error
+	lda	READ_BUFFER+1
+	cmp	PACKET_NUM	; if the number is < the PACKET_NUM, send an
+	bcc	next_packet	; ACK, discard the packet, request the next one
+	beq	calc_checksum	; if they match, move along to checksum
+	lda	#CAN		; if they don't match, send 2 CAN bytes
+	jsr	put_chr		; and exit
+	jsr	put_chr
+	rts
 
+calc_checksum:
 	; then calculate the checksum
-	ldx	#$02
+	ldx	#$03
 	stz	CHECKSUM
 csum_byte:
 	lda	READ_BUFFER, X
@@ -107,12 +121,10 @@ csum_byte:
 	; At this point, all the validations have passed. We need to copy the
 	; data to it's actual destination.
 
-	ldx	#$02
 	ldy	#$00
 copy_byte:
-	lda	READ_BUFFER, X
+	lda	READ_BUFFER+3, Y
 	sta	(DATA_DESTINATION),Y
-	inx
 	iny
 	cpy	#$80
 	bne	copy_byte
@@ -120,15 +132,18 @@ copy_byte:
 	clc
 	lda	DATA_DESTINATION
 	adc	#$80
+	sta	DATA_DESTINATION
 	lda	DATA_DESTINATION+1
 	adc	#$00
+	sta	DATA_DESTINATION+1
 
 	; With the data copied, and the destination incremented, it's time to
 	; request the next packet
 
 	inc	PACKET_NUM
 
-	lda	TIMEOUT_10
+next_packet:
+	lda	#TIMEOUT_10
 	sta	XMODEM_POLL_TIMEOUT
 
 	lda	#ACK
@@ -141,8 +156,14 @@ end_of_transmission:
 	rts
 
 error:
-	rts
+	jmp retry_packet
 
+; the purge routine will continue to call xmodem_poll until a timeout happens
+; at which point, it returns.
+purge_and_retry:
+	jsr xmodem_poll
+	bcs purge_and_retry
+	jmp retry_packet
 
 
 
@@ -176,3 +197,4 @@ rx_register_full:
 	plx
 	rts
 .endproc
+

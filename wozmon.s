@@ -1,5 +1,5 @@
-; vim: set syntax=asm_ca65:
-	.import poll_chr, put_chr, uart_init, init_pinky, c_out
+; vim: set filetype=asm_ca65:
+	.import poll_chr, put_chr, uart_init, init_pinky, c_out, xmodem_receive
 	.segment "CODE"
 
 ; --- Variables ---
@@ -84,8 +84,10 @@ nextitem:
 	beq	setblock		; set BLOCK XAM mode ("." = $AE)
 	cmp	#':'
 	beq	setstor		; set STOR mode! $ba will become $7b
-	cmp	#'R'
+	cmp	#'G'
 	beq	run		; run the program, forget the rest
+	cmp	#'R'
+	beq	read		; read data via xmodem protocol
 	stx	L		; clear input value (X=0)
 	stx	H
 	sty	YSAV		; save Y for comparison
@@ -137,6 +139,15 @@ tonextitem:
 
 run:
 	jmp	(XAML)		; run user's program
+
+; --- READ data via XMODEM protocol to last opened location ---
+read:
+	lda	XAML		; set the DATA_DESTINATION to the last location
+	sta	$05		; and call xmodem_receive
+	lda	XAMH
+	sta	$06
+	jsr	xmodem_receive
+	bra	nextitem
 
 ; --- Not in store mode ---
 
