@@ -17,11 +17,12 @@
 	MUL_RES		= $9B	; 3 bytes ($2B - $2D)
 	MPR		= $9E
 	RSP		= $9F
+	OSP		= $A0
 
 ; --- Variables ---
 	input_buffer	= $8100
 	result_stack	= $8000
-
+	operator_stack	= $8200
 
 ; --- Constants ---
 	CTRLC		= $03
@@ -33,6 +34,7 @@
 main:
 	ldx	#$FF
 	stx	RSP			; initialize result_stack pointer
+	stx	OSP			; and operator_stack pointer
 	lda	#CTRLC
 notcr:
 	cmp	#BS
@@ -71,7 +73,9 @@ skip:
 nextitem:
 	lda	input_buffer,y
 	cmp	#CR
-	beq	getline
+	beq	pop_opstk
+	cmp	#'+'
+	beq	operator
 	cmp	#$27			; ignore everything below "'"
 	bcc	skip
 	stz	L
@@ -125,6 +129,29 @@ notdigit:
 
 	jmp	nextitem
 
+operator:
+	ldx	OSP
+	sta	operator_stack,x
+	dex
+	stx	OSP
+	iny
+	jmp	nextitem
+
+.proc pop_opstk
+	ldx	OSP
+loop:
+	cpx	#$FF
+	beq	end
+	inx
+	lda	operator_stack,x
+	cmp	#'+'
+	bne	loop
+	jsr	calc_add
+	bra	loop
+end:
+	stx	OSP
+	jmp	getline
+.endproc
 
 	jmp	EXIT_VEC
 
