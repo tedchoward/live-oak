@@ -1,17 +1,26 @@
 ; vim:set filetype=asm_ca65:
 
-	.import poll_chr, put_chr, c_out
+	;.import poll_chr, put_chr, c_out
 	.segment "CODE"
 
+
+	.export main, mul
+
+; --- sys calls
+	poll_chr	= $D012
+	put_chr		= $D00B
+	c_out		= $D15C
+
 ; --- Zero Page ---
-	L		= $28
-	H		= $29
-	YSAV		= $2A
-	MUL_RES		= $2B	; 3 bytes ($2B - $2D)
-	RSP		= $2E
+	L		= $98
+	H		= $99
+	YSAV		= $9A
+	MUL_RES		= $9B	; 3 bytes ($2B - $2D)
+	MPR		= $9E
+	RSP		= $9F
 
 ; --- Variables ---
-	input_buffer	= $0200
+	input_buffer	= $8100
 	result_stack	= $8000
 
 
@@ -83,6 +92,7 @@ nextdec:
 	; L,H = L,H * 10
 	pha
 	lda	#10
+	sta	MPR
 	jsr	mul
 	lda	MUL_RES
 	sta	L
@@ -134,9 +144,8 @@ echo:
 	stz	MUL_RES+2
 	ldx	#8
 loop:
-	lsr	A
+	lsr	MPR
 	bcc	no_add
-	tay
 	lda	MUL_RES+1
 	clc
 	adc	L
@@ -148,7 +157,6 @@ no_add:
 	lsr	MUL_RES+2
 	ror	MUL_RES+1
 	ror	MUL_RES
-	tya
 	dex
 	bne	loop
 	rts
