@@ -3,8 +3,7 @@
 	;.import poll_chr, put_chr, c_out
 	.segment "CODE"
 
-
-	.export main, mul
+	.export main, mul, calc_add
 
 ; --- sys calls
 	poll_chr	= $D012
@@ -159,5 +158,32 @@ no_add:
 	ror	MUL_RES
 	dex
 	bne	loop
+	rts
+.endproc
+
+; adds the two 16-bit numbers at the top of the stack
+; places the result on the stack
+.proc calc_add
+	ldx	RSP
+	inx
+	lda	result_stack,x
+	sta	MUL_RES
+	inx
+	lda	result_stack,x
+	sta	MUL_RES+1
+	clc
+	inx
+	lda	result_stack,x
+	adc	MUL_RES
+	sta	MUL_RES
+	inx
+	lda	result_stack,x
+	adc	MUL_RES+1
+	sta	result_stack,x
+	dex
+	lda	MUL_RES
+	sta	result_stack,x
+	dex
+	stx	RSP
 	rts
 .endproc

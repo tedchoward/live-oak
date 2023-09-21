@@ -1,7 +1,7 @@
 all: calc
 
 calc:  calc.o
-	ld65 -C liveoak-ram.cfg -o $@ -m calc.map calc.o
+	ld65 -C liveoak-ram.cfg -o $@ -m calc.map -vm calc.o
 
 %.o : %.s
 	ca65 --cpu 65c02 $<
