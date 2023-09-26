@@ -178,6 +178,9 @@ echo:
 	lda	result_stack,x
 	stx	RSP
 
+	ldx	#0
+	stx	C
+
 	ldx	#8
 	ldy	#$26
 next_digit:
@@ -208,7 +211,16 @@ output_digit:
 	bcc	compare
 	tay
 	lda	D
+	cmp	#$30
+	beq	digit_is_zero
+	stx	C
+	bra	echo_digit
+digit_is_zero:
+	cpx	C
+	bcs	skip_echo
+echo_digit:
 	jsr	echo
+skip_echo:
 	tya
 	ldy	#$13
 	dex
@@ -248,6 +260,7 @@ no_add:
 ; adds the two 16-bit numbers at the top of the stack
 ; places the result on the stack
 .proc calc_add
+	phx
 	ldx	RSP
 	inx
 	lda	result_stack,x
@@ -269,5 +282,6 @@ no_add:
 	sta	result_stack,x
 	dex
 	stx	RSP
+	plx
 	rts
 .endproc
