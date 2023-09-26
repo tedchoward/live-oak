@@ -79,6 +79,8 @@ nextitem:
 	beq	pop_opstk
 	cmp	#'+'
 	beq	operator
+	cmp	#'-'
+	beq	operator
 	cmp	#$27			; ignore everything below "'"
 	bcc	skip
 	stz	L
@@ -148,8 +150,13 @@ loop:
 	inx
 	lda	operator_stack,x
 	cmp	#'+'
-	bne	loop
+	bne	sub
 	jsr	calc_add
+	bra	loop
+sub:
+	cmp	#'-'
+	bne	loop
+	jsr	calc_sub
 	bra	loop
 end:
 	stx	OSP
@@ -178,7 +185,7 @@ echo:
 	lda	result_stack,x
 	stx	RSP
 
-	ldx	#0
+	ldx	#2
 	stx	C
 
 	ldx	#8
@@ -276,6 +283,35 @@ no_add:
 	inx
 	lda	result_stack,x
 	adc	MUL_RES+1
+	sta	result_stack,x
+	dex
+	lda	MUL_RES
+	sta	result_stack,x
+	dex
+	stx	RSP
+	plx
+	rts
+.endproc
+
+; subtracts the two 16-bit numbers at the top of the stack
+; places the resut on the stack
+.proc calc_sub
+	phx
+	ldx	RSP
+	inx
+	lda	result_stack,x
+	sta	MUL_RES
+	inx
+	lda	result_stack,x
+	sta	MUL_RES+1
+	inx
+	lda	result_stack,x
+	sec
+	sbc	MUL_RES
+	sta	MUL_RES
+	inx
+	lda	result_stack,x
+	sbc	MUL_RES+1
 	sta	result_stack,x
 	dex
 	lda	MUL_RES
