@@ -14,7 +14,10 @@
 	L		= $98
 	H		= $99
 	YSAV		= $9A
-	MUL_RES		= $9B	; 3 bytes ($2B - $2D)
+	MUL_RES		= $9B	; 3 bytes ($2B - $2D) same as B, C, D
+	B		= $9B
+	C		= $9C
+	D		= $9D
 	MPR		= $9E
 	RSP		= $9F
 	OSP		= $A0
@@ -150,6 +153,7 @@ loop:
 	bra	loop
 end:
 	stx	OSP
+	jsr	print_num
 	jmp	getline
 .endproc
 
@@ -161,6 +165,59 @@ echo:
 	jsr put_chr
 	jsr c_out
 	rts
+
+; pops the 16-bit number off the top of the stack and echos it as a
+; decimal value
+.proc print_num
+	; pull the 16-bir number off the stack. High Byte -> A, Low Byte -> B
+	ldx	RSP
+	inx
+	lda	result_stack,x
+	sta	B
+	inx
+	lda	result_stack,x
+	stx	RSP
+
+	ldx	#8
+	ldy	#$26
+next_digit:
+	sty	D
+	lsr
+	ror	B
+compare:
+	rol	B
+	rol
+	bcs	subtract
+	tay
+	sec
+	lda	B
+	sbc	tbl,x
+	tya
+	sbc	tbl+1,x
+	tya
+	bcc	output_digit
+subtract:
+	lda	B
+	sbc	tbl,x
+	sta	B
+	tya
+	sbc	tbl+1,x
+	sec
+output_digit:
+	rol	D
+	bcc	compare
+	tay
+	lda	D
+	jsr	echo
+	tya
+	ldy	#$13
+	dex
+	dex
+	bpl	next_digit
+	rts
+tbl:	.word	$4000, $5000, $6400, $7D00, $9C40
+.endproc
+
 
 ; Multiplies the 16-bit number in L,H with the 8-bit number in A
 ; The 24-bit result is stored in MUL_RES
