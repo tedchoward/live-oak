@@ -176,7 +176,7 @@ echo:
 ; pops the 16-bit number off the top of the stack and echos it as a
 ; decimal value
 .proc print_num
-	; pull the 16-bir number off the stack. High Byte -> A, Low Byte -> B
+	; pull the 16-bit number off the stack. High Byte -> A, Low Byte -> B
 	ldx	RSP
 	inx
 	lda	result_stack,x
@@ -185,6 +185,21 @@ echo:
 	lda	result_stack,x
 	stx	RSP
 
+	; handle-negative numbers
+	bpl	not_negative
+	tay
+	lda	#'-'		; if the value is negative, output a '-',
+	jsr	echo		; then convert the number to it's
+	lda	B		; twos-complement value and output
+	eor	#$FF
+	clc
+	adc	#$01
+	sta	B
+	tya
+	eor	#$FF
+	adc	#$00
+
+not_negative:
 	ldx	#2
 	stx	C
 
