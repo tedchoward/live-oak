@@ -21,6 +21,7 @@
 	MPR		= $9E
 	RSP		= $9F
 	OSP		= $A0
+	FLAGS		= $A1		; bit 0 = operator, bit 1 = negate
 
 ; --- Variables ---
 	input_buffer	= $8100
@@ -38,6 +39,8 @@ main:
 	ldx	#$FF
 	stx	RSP			; initialize result_stack pointer
 	stx	OSP			; and operator_stack pointer
+	lda	#$01
+	sta	FLAGS			; initialize flags to %00000001
 	lda	#CTRLC
 notcr:
 	cmp	#BS
@@ -118,9 +121,26 @@ nextdec:
 	iny
 	bne	nextdec
 
+	; once the value has been fully loaded, if the negate flag is set,
+	; we need to convert the number into it's twos-complement form
+	bbr1	FLAGS, notdigit
+	rmb1	FLAGS
+	lda	L
+	eor	#$FF
+	clc
+	adc	#$01
+	sta	L
+	lda	H
+	eor	#$FF
+	adc	#$00
+	sta	H
+
 notdigit:
 	cpy	YSAV
 	beq	getline		; if no digits found, start over
+
+	; if we are processing a digit, clear the operator flag
+	rmb0	FLAGS
 
 	; now we push to the stack
 	ldx	RSP
@@ -135,12 +155,22 @@ notdigit:
 	jmp	nextitem
 
 operator:
+	bbr0	FLAGS, process_operator
+	; if the operator flag was set, this must be a unary
+	cmp	#'-'
+	bne	ignore
+	smb1	FLAGS
+ignore:
+	bra	nextitem
+
+process_operator:
+	smb0	FLAGS
 	ldx	OSP
 	sta	operator_stack,x
 	dex
 	stx	OSP
 	iny
-	jmp	nextitem
+	bra	nextitem
 
 .proc pop_opstk
 	ldx	OSP
@@ -212,8 +242,8 @@ next_digit:
 compare:
 	rol	B
 	rol
-	bcs	subtract
 	tay
+	bcs	subtract
 	sec
 	lda	B
 	sbc	tbl,x
