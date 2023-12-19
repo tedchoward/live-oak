@@ -1,16 +1,16 @@
 ; vim: set filetype=asm_ca65:
 
 	.import put_chr
-	.segment "CODE"
+	;.segment "CODE"
 
 ; --- Zero Page ---
-	XMODEM_POLL_TIMEOUT	= $02
-	PACKET_NUM		= $03
-	CHECKSUM		= $04
-	DATA_DESTINATION	= $05	; 2 bytes
+	;XMODEM_POLL_TIMEOUT	= $02
+	;PACKET_NUM		= $03
+	;CHECKSUM		= $04
+	;DATA_DESTINATION	= $05	; 2 bytes
 
 ; --- Variables ---
-	READ_BUFFER	= $0300
+	;READ_BUFFER	= $0300
 
 ; --- Constants ---
 	ACIA_DATA	= $C010
@@ -28,6 +28,18 @@
 	CAN		= $18
 
 	.export xmodem_receive
+
+	.zeropage
+
+XMODEM_POLL_TIMEOUT:	.byte	$00
+PACKET_NUM:		.byte	$00
+CHECKSUM:		.byte	$00
+DATA_DESTINATION:	.word	$0000
+
+	.segment "BUFFERS"
+READ_BUFFER:		.res	$100
+
+	.code
 
 xmodem_receive:
 	; determine where in memory to store received bytes

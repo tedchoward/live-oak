@@ -1,8 +1,6 @@
 ; vim:set filetype=asm_ca65:
 
 	;.import poll_chr, put_chr, c_out
-	.segment "CODE"
-
 	.export main, mul, calc_add
 
 ; --- sys calls
@@ -10,23 +8,29 @@
 	put_chr		= $D00B
 	c_out		= $D15C
 
+	.zeropage
+
 ; --- Zero Page ---
-	L		= $98
-	H		= $99
-	YSAV		= $9A
-	MUL_RES		= $9B	; 3 bytes ($2B - $2D) same as B, C, D
-	B		= $9B
-	C		= $9C
-	D		= $9D
-	MPR		= $9E
-	RSP		= $9F
-	OSP		= $A0
-	FLAGS		= $A1		; bit 0 = operator, bit 1 = negate
+L:	.byte $00
+H:	.byte $00
+YSAV:	.byte $00
+MUL_RES:	; 3 bytes ($2B - $2D) same as B, C, D
+B:	.byte $00
+C:	.byte $00
+D:	.byte $00
+MPR:	.byte $00
+RSP:	.byte $00
+OSP:	.byte $00
+FLAGS:	.byte $00		; bit 0 = operator, bit 1 = negate
+
+	.segment "BUFFERS"
 
 ; --- Variables ---
-	input_buffer	= $8100
-	result_stack	= $8000
-	operator_stack	= $8200
+input_buffer:	.res $100
+result_stack:	.res $100
+operator_stack:	.res $100
+
+	.code
 
 ; --- Constants ---
 	CTRLC		= $03
@@ -79,8 +83,9 @@ skip:
 nextitem:
 	lda	input_buffer,y
 	cmp	#CR
-	beq	pop_opstk
-	cmp	#'+'
+	bne	:+
+	jmp	pop_opstk
+:	cmp	#'+'
 	beq	operator
 	cmp	#'-'
 	beq	operator
@@ -137,10 +142,11 @@ nextdec:
 
 notdigit:
 	cpy	YSAV
-	beq	getline		; if no digits found, start over
+	bne	:+
+	jmp	getline		; if no digits found, start over
 
 	; if we are processing a digit, clear the operator flag
-	rmb0	FLAGS
+:	rmb0	FLAGS
 
 	; now we push to the stack
 	ldx	RSP
@@ -170,7 +176,7 @@ process_operator:
 	dex
 	stx	OSP
 	iny
-	bra	nextitem
+	jmp	nextitem
 
 .proc pop_opstk
 	ldx	OSP

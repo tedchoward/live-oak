@@ -1,18 +1,22 @@
 ; vim: set filetype=asm_ca65:
 	.import poll_chr, put_chr, uart_init, init_pinky, c_out, xmodem_receive
-	.segment "CODE"
 
-; --- Variables ---
-	XAML = $24	; Last opened location low
-	XAMH = $25	; Last opened location high
-	STL  = $26	; Store address low
-	STH  = $27	; Store address high
-	L    = $28	; Hex value parsing low
-	H    = $29	; Hex value parsing high
-	YSAV = $2a	; Used to see if hex value is given
-	MODE = $2b	; $00=XAM, $7F=STOR, $AE=BLOCK XAM
+	.zeropage
 
-	IN   = $0200	; Input buffer
+XAML:	.byte $00	; Last opened location low
+XAMH:	.byte $00	; Last opened location high
+STL:	.byte $00	; Store address low
+STH:	.byte $00	; Store address high
+L:	.byte $00	; Hex value parsing low
+H:	.byte $00	; Hex value parsing high
+YSAV:	.byte $00	; Used to see if hex value is given
+MODE:	.byte $00	; $00=XAM, $7F=STOR, $AE=BLOCK XAM
+
+	.segment "BUFFERS"
+
+IN:	.res $100	; Input buffer
+
+	.code
 
 ; --- Constants ---
 	BS     = $08	; backspace key
