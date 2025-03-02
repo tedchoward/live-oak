@@ -1,6 +1,7 @@
 ; vim:set filetype=asm_ca65:
 
 	;.import poll_chr, put_chr, c_out
+	.import parse_number
 	.export main, mul, calc_add
 
 ; --- sys calls
@@ -106,24 +107,17 @@ nextdec:
 ; of the new digit.
 
 	; L,H = L,H * 10
-	pha
-	lda	#10
-	sta	MPR
-	jsr	mul
-	lda	MUL_RES
-	sta	L
-	lda	MUL_RES+1
-	sta	H
-	pla
+	tax
+	jsr	mul_10
+	txa
 
 	; L,H = A,0 + L,H
 	adc	L
 	sta	L
-	lda	H
-	adc	#$00
-	sta	H
+	bcc	:+
+	inc	H
 
-	iny
+:	iny
 	bne	nextdec
 
 	; once the value has been fully loaded, if the negate flag is set,
@@ -314,6 +308,29 @@ no_add:
 	bne	loop
 	rts
 .endproc
+
+; Multiplies the 16-bit number in LH by 10
+; Stores the result in LH
+; LH * 10 = LH * 8 + LH * 2 = LH << 3 + LH << 1
+.proc mul_10
+	asl	L
+	rol	H
+	lda	H
+	sta	B
+	lda	L
+.repeat 2
+	asl	A
+	rol	B
+.endrepeat
+	clc
+	adc	L
+	sta	L
+	lda	B
+	adc	H
+	sta	H
+	rts
+.endproc
+
 
 ; adds the two 16-bit numbers at the top of the stack
 ; places the result on the stack
