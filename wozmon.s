@@ -1,5 +1,5 @@
 ; vim: set filetype=asm_ca65:
-	.import poll_chr, put_chr, uart_init, init_pinky, c_out, xmodem_receive
+	.import poll_chr, put_chr, uart_init, init_pinky, c_out, xmodem_receive, irq_init, irq_brk
 
 	.export echo
 
@@ -29,11 +29,12 @@ IN:	.res $100	; Input buffer
 
 reset:
 	cld
-	cli
 	lda	#$02
 	sta	$00		; select RAM bank 2 (0 and 1 mirror low memory)
 	jsr	uart_init
 	jsr	init_pinky
+	jsr	irq_init
+	cli			; enable interrupts
 	lda	#ESC		; cause an auto ESC
 
 ; --- GETLINE process ---
@@ -237,4 +238,4 @@ echo:
 
 	.word	$0F00		; NMI
 	.word	reset
-	.word	$0000		; IRQ
+	.word	irq_brk		; IRQ
