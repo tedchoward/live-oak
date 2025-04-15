@@ -1,0 +1,22 @@
+[default_config]
+version = "0.10.0"
+assembler = "ca65"
+instruction_set = "6502"
+
+[default_config.opts]
+compiler = "/usr/local/bin/cc65"
+compile_flags_txt = []
+diagnostics = true
+default_diagnostics = false
+
+[[project]]
+path = ""
+version = "0.10.0"
+assembler = "ca65"
+instruction_set = "6502"
+
+[project.opts]
+compiler = "/usr/local/bin/cc65"
+compile_flags_txt = []
+diagnostics = true
+default_diagnostics = false

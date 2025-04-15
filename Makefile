@@ -1,18 +1,25 @@
-objects = uart.o xmodem.o kernel.o pinky.o xm2.o
+AS := ca65
+LD := ld65
 
-#kernel : $(objects)
-	#ld65 -C liveoak.cfg -o kernel -m kernel.map -vm $(objects)
+ASFLAGS = --cpu 65c02
+LDFLAGS = -C liveoak.cfg -m $@.map -vm
 
-wozmon : uart.o wozmon.o pinky.o xm2.o
-	ld65 -C liveoak.cfg -o wozmon -m wozmon.map -vm uart.o wozmon.o pinky.o xm2.o
+SRC = $(wildcard *.s)
+OBJ = $(SRC:.s=.o)
+BIN = wozmon
+ROM_DEVICE ?= at28c256
 
-%.o : %.s
-	ca65 --cpu 65c02 $<
+all: $(BIN)
 
-.PHONY : flash
-flash:
-	minipro -p at28c256 -w wozmon
+flash: $(BIN)
+	minipro -u -p $(ROM_DEVICE) -w $(BIN)
 
-.PHONY : clean
-clean :
-	-rm kernel wozmon $(objects)
+$(BIN): $(OBJ)
+	$(LD) $(LDFLAGS) -o $@ $(OBJ)
+
+clean:
+	rm -f $(BIN) $(OBJ) *.map
+
+.PHONY:
+	all flash clean
+
