@@ -5,6 +5,7 @@
 ; This sets up a 60Hz timer that increments a 32-bit integer (`ticks`)
 
 
+	.import keyboard_interrupt_handler
 	.export irq_init, irq_brk, ticks
 
 	VIA_T1CL	= $C004
@@ -46,9 +47,11 @@ irq_init:
 ; This is the IRQ Vector. It branches to the break handler if the B flag is set.
 ; Otherwise, it falls through to the irq handler
 irq_brk:
-	pla
 	pha
-	and #$10
+	phx
+	tsx
+	lda 103,x		; read S register from stack
+	and #$10		; and check for B flag
 	bne break_handler
 
 ; The IRQ handler validates that the interrupt came from the VIA, and from
@@ -57,6 +60,8 @@ irq_handler:
 	bit VIA_IFR
 	bpl :+
 	bvc :+
+
+	jsr keyboard_interrupt_handler
 
 	; timer 1 handler
 	bit VIA_T1CL	; clear the interrupt
@@ -68,8 +73,8 @@ irq_handler:
 	bne :+
 	inc ticks+3
 :
-	rti
-
-; The brak handler currently does nothing
+; the break handler does nothing currently, so irq can safely fall through
 break_handler:
+	plx
+	pla
 	rti

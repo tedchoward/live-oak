@@ -1,7 +1,7 @@
 ; vim: set filetype=asm_ca65:
-	.import poll_chr, put_chr, uart_init, init_pinky, c_out, xmodem_receive, irq_init, irq_brk
+	.import poll_chr, put_chr, uart_init, init_pinky, c_out, xmodem_receive, irq_init, irq_brk, keyboard_init
 
-	.export echo
+	.export echo, escape
 
 	.zeropage
 
@@ -34,6 +34,7 @@ reset:
 	jsr	uart_init
 	jsr	init_pinky
 	jsr	irq_init
+	jsr	keyboard_init
 	cli			; enable interrupts
 	lda	#ESC		; cause an auto ESC
 
