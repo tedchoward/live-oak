@@ -50,7 +50,7 @@ irq_brk:
 	pha
 	phx
 	tsx
-	lda 103,x		; read S register from stack
+	lda $103,x		; read S register from stack
 	and #$10		; and check for B flag
 	bne break_handler
 
@@ -61,7 +61,7 @@ irq_handler:
 	bpl :+
 	bvc :+
 
-	jsr keyboard_interrupt_handler
+	; jsr keyboard_interrupt_handler
 
 	; timer 1 handler
 	bit VIA_T1CL	; clear the interrupt

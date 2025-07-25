@@ -1,8 +1,8 @@
 ; vim: set filetype=asm_ca65:
 ; Routines to control the VDP "Pinky"
 
-	;CURSOR_ROW	= $05
-	;CURSOR_COL	= $06
+	;CURSOR_ROW		= $05
+	;CURSOR_COL		= $06
 	;CURRENT_ROW_ADR	= $07
 
 	VRAM_ADDR_HI	= $C020
@@ -13,7 +13,7 @@
 
 	;LINE_BUFFER	= $0400
 
-	.export init_pinky, c_out, cr_out
+	.export init_pinky, c_out, cr_out, clear_screen
 
 	.zeropage
 CURSOR_ROW:		.byte	$00

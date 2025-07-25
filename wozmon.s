@@ -33,8 +33,8 @@ reset:
 	sta	$00		; select RAM bank 2 (0 and 1 mirror low memory)
 	jsr	uart_init
 	jsr	init_pinky
-	jsr	irq_init
-	jsr	keyboard_init
+	; jsr	irq_init
+	; jsr	keyboard_init
 	cli			; enable interrupts
 	lda	#ESC		; cause an auto ESC
 
@@ -151,9 +151,9 @@ run:
 ; --- READ data via XMODEM protocol to last opened location ---
 read:
 	lda	XAML		; set the DATA_DESTINATION to the last location
-	sta	$05		; and call xmodem_receive
+	sta	$16		; and call xmodem_receive
 	lda	XAMH
-	sta	$06
+	sta	$17
 	jsr	xmodem_receive
 	bra	nextitem
 
