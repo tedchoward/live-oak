@@ -1,6 +1,6 @@
 ; vim: set filetype=asm_ca65:
 
-	.export keyboard_init, keyboard_interrupt_handler, last_key_pressed, scan_keyboard
+	.export keyboard_init, keyboard_interrupt_handler, last_key_pressed, scan_keyboard, KEYBOARD_BUFFER, KEYBOARD_CHRIN
 
 	VIA_PORTB	= $C000
 	VIA_PORTA	= $C001
@@ -13,29 +13,58 @@
 
 last_key_pressed:
 	.byte	$00
+kb_write_ptr:
+	.byte	$00
+kb_read_ptr:
+	.byte	$00
+
+.segment "BUFFERS"
+
+KEYBOARD_BUFFER:
+	.res	$100
 
 .code
 
+KEYBOARD_CHRIN:
+	phx
+	jsr buffer_size
+	beq @no_key
+	jsr buffer_read
+	tax
+	lda ascii_table,X
+	plx
+	sec
+	rts
+@no_key:
+	plx
+	clc
+	rts
+
 ; PORT A => bit 7 input, rest output
 ; PORT B => bit 1 output
-; PORT B = #$01
+; PORT B = #$00 -- disable autoscan
 ; CA1 rising edge interrupt
 keyboard_init:
 	lda #$7f
 	sta VIA_DDRA
 	lda #$01
 	sta VIA_DDRB
-	sta VIA_PORTB
 	sta VIA_PCR
+	stz VIA_PORTB
+	stz kb_write_ptr
+	stz kb_read_ptr
 	rts
 
 keyboard_interrupt_handler:
-	lda VIA_IFR		; bit 0 is set if key was pressed
-	lsr
-	bcc @return		; if no key pressed, do nothing
+	ldx last_key_pressed
+	beq @no_last_key
+	jsr check_key_pressed	; is last_key_pressed currently pressed?
+	bmi @return
+@no_last_key:
 	jsr scan_keyboard
-	bpl @return		; bit 7 will be set if key found
-	sta last_key_pressed
+	bpl @return
+	jsr buffer_write
+
 @return:
 	rts
 
@@ -74,3 +103,59 @@ scan_keyboard:
 	and #$ff		; restore flags based on value in A
 	rts
 
+
+; On Entry:
+;	X = key to test
+; On Exit:
+;	A is preserved
+;	Carry is preserved
+;
+;	X = $80 if key pressed
+;	    $00 otherwise
+check_key_pressed:
+	stx VIA_PORTA
+	ldx VIA_PORTA
+	rts
+
+; modifies
+;	flags, X
+.proc buffer_write
+	ldx kb_write_ptr
+	sta KEYBOARD_BUFFER,X
+	inc kb_write_ptr
+	rts
+.endproc
+
+; modifies
+;	flags, A, X
+.proc buffer_read
+	ldx kb_read_ptr
+	lda KEYBOARD_BUFFER,X
+	inc kb_read_ptr
+	rts
+.endproc
+
+; modifies flags, A
+.proc buffer_size
+	lda kb_write_ptr
+	sec
+	sbc kb_read_ptr
+	rts
+.endproc
+
+ascii_table:
+	.byte "@HPX08  "
+	.byte "        "
+	.byte "AIQY19  "
+	.byte "        "
+	.byte "BJRZ2:  "
+	.byte "        "
+	.byte "CKS{3+  "
+	.byte "        "
+	.byte "DLT|4<  "
+	.byte "        "
+	.byte "EMU}5=  "
+	.byte "        "
+	.byte "FNV~6>  "
+	.byte "        "
+	.byte "GOW+7?  "

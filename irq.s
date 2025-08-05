@@ -61,7 +61,7 @@ irq_handler:
 	bpl :+
 	bvc :+
 
-	; jsr keyboard_interrupt_handler
+	jsr keyboard_interrupt_handler
 
 	; timer 1 handler
 	bit VIA_T1CL	; clear the interrupt
