@@ -3,6 +3,8 @@
 
 	.export echo, escape
 
+	.export XAML, XAMH, STL, STH, L, H, YSAV, MODE, IN
+
 	.zeropage
 
 XAML:	.byte $00	; Last opened location low

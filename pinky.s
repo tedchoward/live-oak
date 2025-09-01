@@ -13,7 +13,7 @@
 
 	;LINE_BUFFER	= $0400
 
-	.export init_pinky, c_out, cr_out, clear_screen
+	.export init_pinky, c_out, cr_out, clear_screen, CURSOR_ROW, CURSOR_COL, CURRENT_ROW_ADR, LINE_BUFFER
 
 	.zeropage
 CURSOR_ROW:		.byte	$00

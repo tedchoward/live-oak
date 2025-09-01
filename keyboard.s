@@ -1,6 +1,6 @@
 ; vim: set filetype=asm_ca65:
 
-	.export keyboard_init, keyboard_interrupt_handler, last_key_pressed, scan_keyboard, KEYBOARD_BUFFER, KEYBOARD_CHRIN
+	.export keyboard_init, keyboard_interrupt_handler, last_key_pressed, kb_write_ptr, kb_read_ptr, scan_keyboard, KEYBOARD_BUFFER, KEYBOARD_CHRIN
 
 	VIA_PORTB	= $C000
 	VIA_PORTA	= $C001
@@ -51,6 +51,7 @@ keyboard_init:
 	sta VIA_DDRB
 	sta VIA_PCR
 	stz VIA_PORTB
+	stz last_key_pressed
 	stz kb_write_ptr
 	stz kb_read_ptr
 	rts
@@ -63,6 +64,8 @@ keyboard_interrupt_handler:
 @no_last_key:
 	jsr scan_keyboard
 	bpl @return
+	and #$7F
+	sta last_key_pressed
 	jsr buffer_write
 
 @return:
@@ -73,18 +76,19 @@ keyboard_interrupt_handler:
 ;	- A: bit 7 = set if key is pressed
 ;	     bits 0-6 = the scan code of the key pressed
 scan_keyboard:
-	stz VIA_PORTB		; disable autoscan
+	; stz VIA_PORTB		; disable autoscan
 	ldx #$08
 	stx VIA_PORTA		; select invalid key
 	lda #$01
 	sta VIA_IFR		; clear key interrupt
 
-@next_col:
 	dex
-	bmi @not_found
+@next_col:
+	; dex
+	; bmi @not_found
 	stx VIA_PORTA
-	bit VIA_IFR		; is a key in this column pressed?
-	beq @next_col
+	; bit VIA_IFR		; is a key in this column pressed?
+	; beq @next_col
 
 	txa
 @next_row:
@@ -95,11 +99,13 @@ scan_keyboard:
 	clc
 	adc #$10
 	bpl @next_row
+	dex
+	bpl @next_col
 @not_found:
 	and #$7f		; clear bit 7 to indicate no match
 @return:
-	ldx #$01
-	stx VIA_PORTB		; enable autoscan
+	; ldx #$01
+	; stx VIA_PORTB		; enable autoscan
 	and #$ff		; restore flags based on value in A
 	rts
 

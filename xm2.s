@@ -27,7 +27,7 @@
 	NAK		= $15
 	CAN		= $18
 
-	.export xmodem_receive, DATA_DESTINATION
+	.export xmodem_receive, XMODEM_POLL_TIMEOUT, PACKET_NUM, CHECKSUM, DATA_DESTINATION, READ_BUFFER
 
 	.zeropage
 
